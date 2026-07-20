@@ -54,9 +54,20 @@
                 <p>Online</p>
             </section>
 
-            <section class="panel">
-                <h2>Radar</h2>
-                
+            <section class="panel radar-panel" id="radar-panel">
+                <div class="panel-heading">
+                    <h2>Radar</h2>
+
+                    <button
+                        id="expand-map-btn"
+                        type="button"
+                        aria-label="Expand radar map"
+                        title="Expand radar map"
+                    >
+                        <i class="fa-solid fa-expand"></i>
+                        </button>    
+                </div>
+
                 <div id="radar-map"></div>
 
                 <p id="radar-status">Initializing map...</p>
@@ -98,5 +109,12 @@
     </script>
     
     <script src="app.js"></script>
+
+<footer id="system-footer">
+    <span>Project Overwatch v0.1.1</span>
+    <span id="build-date">Build: 2026-07-20</span>
+    <span id="system-status">Status: Operational</span>
+</footer>
+
 </body>    
 </html>

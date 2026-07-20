@@ -112,3 +112,145 @@ main {
         drop-shadow(0 0 10px #ffff00)
         drop-shadow(0 0 20px #ffcc00)
 }
+
+#system-footer {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    padding: 8px 12px;
+    background: #111;
+    color: #00ff66;
+    border-top: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+}
+
+.radar-panel {
+    position: relative;
+}
+
+.panel-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.panel-heading h2 {
+    margin: 0;
+}
+
+#expand-map-btn {
+    width: 38px;
+    height: 38px;
+
+    border: 1px solid #4fd5ff;
+    border-radius: 6px;
+
+    background: rgba(0, 0, 0, 0.75);
+    color: #4fd5ff;
+
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+#expand-map-btn:hover {
+    background: rgba(79, 213, 255, 0.15);
+}
+
+body.map-open {
+    overflow: hidden;
+}
+
+#radar-panel.fullscreen-map {
+    position: fixed;
+    inset: 0;
+
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+
+    margin: 0;
+    padding: 0;
+
+    border: none;
+    border-radius: 0;
+
+    background: #05090d;
+    z-index: 9999;
+}
+
+#radar-panel.fullscreen-map .panel-heading h2 {
+    display: none;
+}
+
+#radar-panel.fullscreen-map .panel-heading {
+    margin: 0;
+    padding: 0;
+    height: 0;
+}
+
+#radar-panel.fullscreen-map #radar-status {
+    display: none;
+}
+
+#radar-panel.fullscreen-map #radar-map {
+    position: absolute;
+    inset: 0;
+
+    width: 100%;
+    height: 100%;
+
+    min-height: 0;
+    border-radius: 0;
+}
+
+#radar-panel.fullscreen-map #expand-map-btn {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+
+    width: 44px;
+    height: 44px;
+
+    z-index: 20000;
+
+    border: 1px solid #4fd5ff;
+    border-radius: 8px;
+
+    background: rgba(5, 9, 13, 0.85);
+    color: #4fd5ff;
+
+    font-size: 20px;
+    font-weight: bold;
+}
+
+#radar-panel.fullscreen-map {
+    position: fixed !important;
+
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+
+    width: auto !important;
+    height: auto !important;
+
+    max-width: none !important;
+    max-height: none !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    transform: none !important;
+
+    box-sizing: border-box;
+    overflow: hidden;
+
+    border: none;
+    border-radius: 0;
+
+    z-index: 9999;
+}

@@ -7,6 +7,8 @@ const DEFAULT_LONGITUDE = -93.1907;
 const DEFAULT_MAP_ZOOM = 9;
 const RADAR_OPACITY = 0.6;
 
+
+
 // =============================
 // Global Variables
 // =============================
@@ -488,4 +490,37 @@ initializeWeatherRadar();
 initializeLightning();
 initializeWarnings();
 
+const expandMapButton =
+    document.getElementById("expand-map-btn");
 
+const radarPanel =
+    document.getElementById("radar-panel");
+
+expandMapButton.addEventListener("click", () => {
+    const isFullscreen =
+        radarPanel.classList.toggle("fullscreen-map");
+
+    document.body.classList.toggle(
+        "map-open",
+        isFullscreen
+    );
+
+    expandMapButton.textContent =
+        isFullscreen ? "X" : "⛶";
+
+    expandMapButton.setAttribute(
+        "aria-label",
+        isFullscreen
+            ? "Close full screen radar map"
+            : "Expand radar map"
+    );
+
+    expandMapButton.title =
+        isFullscreen
+            ? "Close full screen radar map"
+            : "Expand radar map";
+
+    setTimeout(() => {
+        radarMap.invalidateSize();
+    }, 100);
+});
