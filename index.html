@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>OverWatch OS</title>
+    
+    <link rel="stylesheet" href="style.css">
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""
+    >    
+</head>
+
+<body>
+    <div id="app">
+
+    <header>
+            <h1>PROJECT OVERWATCH</h1>
+            <p>Mission Control Interface</p>
+    </header>
+    
+    <main>
+
+            <section class="panel weather-panel">
+                <h2>Weather</h2>
+
+                <p id="weather-status">Requesting location...</p>
+
+                <div id="weather-data" class="weather-data">
+                    <div id="weather-temperature">--°F</div>
+                    <div id="weather-condition">Waiting...</div>
+
+                    <p>Feels like: <span id="weather-feels-like">--°F</span></p> 
+                    <p>Humidity: <span id="weather-humidity">--%</span></p>
+                    <p>Wind: <span id="weather-wind">-- mph</span></p>
+                    <p>Gusts: <span id="weather-gusts">-- mph</span></p>   
+                </div>
+                
+            </section>
+
+            <section class="panel">
+                <h2>Radio Scanner</h2>
+                <p>Loading...</p>
+            </section>
+            
+            <section class="panel">
+                <h2>System Status</h2>
+                <p>Online</p>
+            </section>
+
+            <section class="panel">
+                <h2>Radar</h2>
+                
+                <div id="radar-map"></div>
+
+                <p id="radar-status">Initializing map...</p>
+            </section>
+
+            <section class="panel">
+                <h2>Alerts</h2>
+                <p>None</p>
+            </section>
+
+            <section class="panel">
+                <h2>Clock</h2>
+                <p id="clock">--:--:--</p>
+            </section>
+
+            <section class="panel">
+                <h2>Notes</h2>
+                <p>No Notes.</p>
+            </section>
+
+            <section class="panel">
+                <h2>Camera</h2>
+                <p>Offline</p>
+            </section>
+
+            <section class="panel">
+                <h2>Tools</h2>
+                <p>Ready</p>
+            </section>
+
+    </main>
+
+    </div>
+
+    <script
+       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+       integrity="sha156-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvT1ZBo=" 
+       crossorigin="">
+    </script>
+    
+    <script src="app.js"></script>
+</body>    
+</html>
