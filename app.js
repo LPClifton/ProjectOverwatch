@@ -214,6 +214,8 @@ function initializeRadarMap() {
                     .addTo(radarMap)
                     .bindPopup("Project Overwatch")
                     .openPopup();
+
+                    radarMap.setView([latitude, longitude], 15);
                 } else {
                     locationMarker.setLatLng([latitude, longitude]);
                 } 
@@ -232,7 +234,6 @@ function initializeRadarMap() {
                     accuracyCircle.setRadius(accuracy);
                 }
             
-                radarMap.setView([latitude, longitude], 15);
                 const accuracyFeet = position.coords.accuracy * 3.28084;
 
                 radarStatus.textContent = 
