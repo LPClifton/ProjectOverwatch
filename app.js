@@ -10,10 +10,15 @@ const RADAR_OPACITY = 0.6;
 const RADAR_FRAME_DELAY = 900;
 const RADAR_END_PAUSE = 2000;
 
+const SENTINEL_RADIUS_MILES = 1000;
+
 
 // =============================
 // Global Variables
 // =============================
+
+let currentLatitude = null;
+let currentLongitude = null;
 
 let radarMap;
 let locationMarker;
@@ -33,6 +38,51 @@ let warningsRefreshTimer;
 
 let tempestSocket;
 let tempestReconnectTimer;
+
+// =============================
+// Notification Manager
+// =============================
+
+const notificationManager = {
+    alerts: [],
+
+    clear() {
+        this.alerts = [];
+    },
+
+    beginRefresh() {
+        this.alerts.forEach(alert => {
+            alert._syncSeen = false;
+        });
+    },
+
+    endRefresh() {
+        this.alerts = this.alerts.filter(alert => alert._syncSeen);
+    },
+    
+    addAlert(alert) {
+        const existingAlert = this.alerts.find(
+            a => a.id === alert.id
+        );
+
+        if (existingAlert) {
+
+            Object.assign(existingAlert, alert);
+            existingAlert._syncSeen = true;
+        } else {
+
+            alert._syncSeen = true;
+            this.alerts.push(alert);
+
+        }
+
+    },    
+
+    getAlerts() {
+        return this.alerts;
+    }
+}
+
 
 
 // =============================
@@ -153,6 +203,107 @@ function requestWeatherLocation() {
     );
 }
 
+// ================================
+// Sentinel Functions
+// ================================
+
+function calculateDistanceMiles(
+    latitude1,
+    longitude1,
+    latitude2,
+    longitude2
+) {
+    const earthRadiusMiles = 3958.8;
+
+    const latitudeDifference =
+        degreesToRadians(latitude2 - latitude1);
+
+    const longitudeDifference =
+        degreesToRadians(longitude2 - longitude1);
+
+    const startLatitude =
+        degreesToRadians(latitude1);
+
+    const endLatitude =
+        degreesToRadians(latitude2);
+
+    const a =
+        Math.sin(latitudeDifference / 2) ** 2 +
+        Math.cos(startLatitude) *
+        Math.cos(endLatitude) *
+        Math.sin(longitudeDifference / 2) ** 2;
+
+    const c =
+        2 * Math.atan2(
+            Math.sqrt(a),
+            Math.sqrt(1 - a)
+        );
+
+    return earthRadiusMiles * c;
+}
+
+function calculateBearing(
+    latitude1,
+    longitude1,
+    latitude2,
+    longitude2
+) {
+    const startLatitude =
+        degreesToRadians(latitude1);
+
+    const endLatitude =
+        degreesToRadians(latitude2);
+
+    const longitudeDifference =
+        degreesToRadians(longitude2 - longitude1);
+
+    const y =
+        Math.sin(longitudeDifference) *
+        Math.cos(endLatitude);
+
+    const x =
+        Math.cos(startLatitude) *
+        Math.sin(endLatitude) -
+        Math.sin(startLatitude) *
+        Math.cos(endLatitude) *
+        Math.cos(longitudeDifference);
+
+    const bearing =
+        Math.atan2(y, x) *
+        (180 / Math.PI);
+
+    return (bearing + 360) % 360;
+}
+
+function bearingToCompass(bearing) {
+    const compassDirections = [
+        "North",
+        "NNE",
+        "NE",
+        "ENE",
+        "East",
+        "ESE",
+        "SE",
+        "SSE",
+        "South",
+        "SSW",
+        "SW",
+        "WSW",
+        "West",
+        "WNW",
+        "NW",
+        "NNW"
+    ];
+
+    const index =
+        Math.round(bearing / 22.5) % 16;
+
+    return compassDirections[index];
+}
+
+function degreesToRadians(degrees) {
+    return degrees * (Math.PI / 180);
+}
 
 // ================================
 // Radar Functions
@@ -215,6 +366,9 @@ function initializeRadarMap() {
             function (position) {
                 const latitude = position.coords.latitude;
                 const longitude = position.coords.longitude;
+
+                currentLatitude = latitude;
+                currentLongitude = longitude;
 
                 if (!locationMarker) {
                     locationMarker = L.marker([latitude, longitude])
@@ -447,20 +601,39 @@ function initializeRadarControls() {
 // Alerts
 // =====================================
 
-function updateAlertStatus(message) {
-    console.log("updateAlertStatus called:", message);
+function updateAlertsPanel() {
+    const alertsStatus =
+        document.getElementById("alerts-status");
 
-    const alertPanel = document.getElementById("alerts-status");
-    console.log(alertPanel);
-    
-    alertPanel.textContent = message;
+    const alerts =
+        notificationManager.getAlerts();
 
-}
+    if (alerts.length === 0) {
+        alertsStatus.textContent = "🟢 All Clear";
+        return;
+    }
 
-function evaluateThreats() {
-    
-}
+    const priorityOrder = {
+        critical: 4,
+        high: 3, 
+        medium: 2,
+        low: 1
+    };
 
+    alerts.sort(function (alertA, alertB) {
+        return (
+            priorityOrder[alertB.priority] -
+            priorityOrder[alertA.priority]
+        );
+    });
+
+    const highestAlert = alerts[0];
+
+    alertsStatus.textContent =
+        `${highestAlert.icon} ${highestAlert.title} — ` +
+        `${highestAlert.distance.toFixed(1)} miles ${highestAlert.direction}`;
+
+}        
 
 // ====================================
 // Lightning Functions
@@ -530,7 +703,7 @@ function initializeWarnings() {
 
 async function loadNwsWarnings () {
     const warningsUrl = 
-        "https://api.weather.gov/alerts/active?area=LA";
+        "https://api.weather.gov/alerts/active?area=TX";
 
         try {
             const response = await fetch(warningsUrl, {
@@ -548,10 +721,66 @@ async function loadNwsWarnings () {
             const warningData = await response.json();
 
             warningsLayer.clearLayers();
+            notificationManager.beginRefresh();
+
+            let nearbyAlertCount = 0;
 
             L.geoJSON(warningData, {
                 filter: function (feature) {
-                    return feature.geometry !== null;
+                    if (feature.geometry === null) {
+                        return false;
+                    }
+
+                    if (
+                        currentLatitude === null ||
+                        currentLongitude === null
+                    ) {
+                        return false;
+                    }
+
+                    const featureLayer = L.geoJSON(feature);
+
+                    const warningCenter = 
+                        featureLayer.getBounds().getCenter();
+
+                    const warningDistanceMiles = 
+                        calculateDistanceMiles(
+                            currentLatitude,
+                            currentLongitude,
+                            warningCenter.lat,
+                            warningCenter.lng
+                        );
+
+                    const warningBearing = 
+                    calculateBearing(
+                        currentLatitude,
+                        currentLongitude,
+                        warningCenter.lat,
+                        warningCenter.lng
+                    );
+                    
+                    const warningDirection = 
+                        bearingToCompass(warningBearing);
+
+                        
+                    feature.properties.distanceMiles = 
+                        warningDistanceMiles;
+
+                    feature.properties.bearing = 
+                        warningBearing;
+                        
+                    feature.properties.direction =
+                        warningDirection;
+                        
+                    const isNearby =
+                        warningDistanceMiles <= SENTINEL_RADIUS_MILES;
+
+                    if (isNearby) {
+                        nearbyAlertCount++;
+                    }    
+                        
+                    return isNearby;
+
                 },
 
                 style: function (feature) {
@@ -562,6 +791,47 @@ async function loadNwsWarnings () {
 
                 onEachFeature: function (feature, layer) {
                     const properties = feature.properties;
+
+                    properties.priority = 
+                        getAlertPriority(properties.event);
+
+                    function getAlertIcon(priority) {
+                        if (priority === "critical") {
+                            return "🚨";
+                        }        
+                        
+                        if (priority === "high") {
+                            return "⚠️";
+                        }
+                        
+                        if (priority === "medium") {
+                            return "🟡";
+                        }
+
+                        return "🔵";
+                    }
+
+                    notificationManager.addAlert({
+                        id: feature.id,
+                        
+                        source: "NWS",
+                        createdBy: "Sentinel",
+
+                        title: properties.event,
+                        priority: properties.priority,
+                        distance: properties.distanceMiles,
+                        direction: properties.direction,
+                        expires: properties.expires,
+                        icon: getAlertIcon(properties.priority),
+
+                    });  
+
+                    console.log(
+                        "[Sentinel]",
+                        properties.event,
+                        properties.priority,
+                        `${properties.distanceMiles.toFixed(1)}`
+                    );
 
                     layer.bindPopup(`
                         <strong>${properties.event}</strong><br>
@@ -574,15 +844,54 @@ async function loadNwsWarnings () {
                 }
             }).addTo(warningsLayer);
 
+            notificationManager.endRefresh();
+
             console.log(
                 `NWS alerts loaded: ${warningData.features.length}`
             );
+
+            console.log(
+                `Nearby alerts displayed: ${nearbyAlertCount}`
+            );
+
+            updateAlertsPanel();
+
         } catch (error) {
             console.error(
-                "Unable to load NwS warnings:",
+                "Unable to load NWS warnings:",
                 error
             );
+
+            updateAlertsPanel();
         }
+}
+
+function getAlertPriority(eventName) {
+    const event = eventName.toLowerCase();
+
+    if (
+        event.includes("tornado warning") ||
+        event.includes("flash flood warning")
+    ) {
+        return "critical";
+    }
+
+    if (
+        event.includes("severe thunderstorm warning") ||
+        event.includes("hurricane warning") ||
+        event.includes("tropical storm warning")
+    ) {
+        return "high";
+    }
+
+    if (
+        event.includes("watch") ||
+        event.includes("advisory")
+    ) {
+        return "medium";
+    }
+
+    return "low";
 }
 
 function getWarningStyle(eventName) {
@@ -610,6 +919,7 @@ function getWarningStyle(eventName) {
     ) {
         borderColor = "#00ff00";
         fillColor = "#00ff00";
+
     } else if (event.includes("watch")) {
         borderColor = "#ffff00";
         fillColor = "#ffff00";
@@ -678,6 +988,8 @@ expandMapButton.addEventListener("click", () => {
 
 updateClock();
 
+updateAlertsPanel();
+
 requestWeatherLocation();
 
 initializeRadarMap();
@@ -690,7 +1002,7 @@ initializeLightning();
 
 initializeWarnings();
 
-updateAlertStatus("All Clear");
+
 
 
 
