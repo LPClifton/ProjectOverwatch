@@ -1,12 +1,13 @@
 // =============================
-// Project Overwatch Settings
+// Constants
 // =============================
 
 const DEFAULT_LATITUDE = 30.3027;
 const DEFAULT_LONGITUDE = -93.1907;
 const DEFAULT_MAP_ZOOM = 9;
-const RADAR_OPACITY = 0.6;
 
+const RADAR_OPACITY = 0.6;
+const RADAR_FRAME_DELAY = 900;
 
 
 // =============================
@@ -25,7 +26,6 @@ let currentRadarFrame = 0;
 let radarAnimationTimer = null;
 let radarAnimationPaused = false;
 
-const RADAR_FRAME_DELAY = 900; // milliseconds
 
 let warningsRefreshTimer;
 
@@ -49,7 +49,7 @@ function updateClock() {
     document.getElementById("clock").textContent = time;
 }
 
-updateClock();
+
 
 setInterval(updateClock, 1000);
 
@@ -151,7 +151,6 @@ function requestWeatherLocation() {
     );
 }
 
-requestWeatherLocation();
 
 // ================================
 // Radar Functions
@@ -283,10 +282,6 @@ function initializeRadarMap() {
 
 }  
 
-// ===================================
-// Application Start Up
-// ===================================
-
 async function initializeWeatherRadar() {
     console.log("Loading weather radar...");
 
@@ -357,6 +352,26 @@ function startRadarAnimation() {
     }, RADAR_FRAME_DELAY);
 }
 
+
+// =====================================
+// Alerts
+// =====================================
+
+function updateAlertStatus(message) {
+    console.log("updateAlertStatus called:", message);
+
+    const alertPanel = document.getElementById("alerts-status");
+    console.log(alertPanel);
+    
+    alertPanel.textContent = message;
+
+}
+
+function evaluateThreats() {
+    
+}
+
+
 // ====================================
 // Lightning Functions
 // ====================================
@@ -388,7 +403,7 @@ function addTestLightningStrike() {
 
     const lightningIcon = L.divIcon({
         className: "lightning-marker",
-        html: '<span class="lighting-symbol">⚡️</span>',
+        html: '<span class="lightning-symbol">⚡️</span>',
         iconSize: [48, 48],
         iconAnchor: [24, 24]
     });
@@ -470,7 +485,7 @@ async function loadNwsWarnings () {
             }).addTo(warningsLayer);
 
             console.log(
-                `NWS alerts loaded: ${warningData.features.lenghth}`
+                `NWS alerts loaded: ${warningData.features.length}`
             );
         } catch (error) {
             console.error(
@@ -527,11 +542,7 @@ function formatAlertTime(timeString) {
     return new Date(timeString).toLocaleString();
 }
 
-requestWeatherLocation();
-initializeRadarMap();
-initializeWeatherRadar();
-initializeLightning();
-initializeWarnings();
+
 
 const expandMapButton =
     document.getElementById("expand-map-btn");
@@ -567,3 +578,24 @@ expandMapButton.addEventListener("click", () => {
         radarMap.invalidateSize();
     }, 100);
 });
+
+// ===================================
+// Application Start Up
+// ===================================
+
+updateClock();
+
+requestWeatherLocation();
+
+initializeRadarMap();
+
+initializeWeatherRadar();
+
+initializeLightning();
+
+initializeWarnings();
+
+updateAlertStatus("All Clear");
+
+
+
