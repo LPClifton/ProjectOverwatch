@@ -23,6 +23,7 @@ let layerControl;
 let radarFrames = [];
 let currentRadarFrame = 0;
 let radarAnimationTimer = null;
+let radarAnimationPaused = false;
 
 const RADAR_FRAME_DELAY = 900; // milliseconds
 
