@@ -1,0 +1,11 @@
+Version 0.1.0
+
+- Added animated weather radar
+- Added radar playback controls
+- Added GPS tracking and accuracy indicator
+- Added NWS warning polygons
+- Added live lightning overlay
+- Added fullscreen radar mode
+- Improved radar UI and map controls
+- General code cleanup and bug fixes
+

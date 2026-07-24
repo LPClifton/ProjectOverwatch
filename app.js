@@ -8,6 +8,7 @@ const DEFAULT_MAP_ZOOM = 9;
 
 const RADAR_OPACITY = 0.6;
 const RADAR_FRAME_DELAY = 900;
+const RADAR_END_PAUSE = 2000;
 
 
 // =============================
@@ -25,6 +26,7 @@ let radarFrames = [];
 let currentRadarFrame = 0;
 let radarAnimationTimer = null;
 let radarAnimationPaused = false;
+let radarIsPlaying = true;
 
 
 let warningsRefreshTimer;
@@ -313,6 +315,8 @@ function displayRadarFrame(frameIndex) {
 
     }
 
+    updateRadarTimestamp (frame)
+
     const radarTileUrl = 
     "https://tilecache.rainviewer.com" +
     frame.path +
@@ -331,25 +335,111 @@ function displayRadarFrame(frameIndex) {
         attribution: "RainViewer"
     });
 
-    weatherRadar.addTo(radarMap)
+    weatherRadar.addTo(radarMap);
 }
 
 function startRadarAnimation() {
     if (radarAnimationTimer) {
-        clearInterval(radarAnimationTimer);
+        clearTimeout(radarAnimationTimer);
     }
 
-    radarAnimationTimer = setInterval(() => {
+    radarIsPlaying = true;
+
+    function advanceRadarFrame() {
         currentRadarFrame++;
 
         if (currentRadarFrame >= radarFrames.length) {
             currentRadarFrame = 0;
         }
 
-        console.log("Displaying radar frame:", currentRadarFrame)
+        console.log("Displaying radar frame:", currentRadarFrame);
 
         displayRadarFrame(currentRadarFrame);
-    }, RADAR_FRAME_DELAY);
+
+        const isNewestFrame =
+            currentRadarFrame === radarFrames.length - 1;
+
+        const nextDelay = isNewestFrame
+            ? RADAR_END_PAUSE
+            : RADAR_FRAME_DELAY;
+
+        radarAnimationTimer = setTimeout(
+            advanceRadarFrame,
+            nextDelay
+        );
+    }
+
+    radarAnimationTimer = setTimeout(
+        advanceRadarFrame,
+        RADAR_FRAME_DELAY
+    );
+}
+
+function stopRadarAnimation() {
+    if (radarAnimationTimer) {
+        clearTimeout(radarAnimationTimer);
+    }
+
+    radarIsPlaying = false;
+}
+
+function updateRadarTimestamp(frame) {
+    const timestamp =
+        new Date(frame.time * 1000);
+
+    document.getElementById("radar-timestamp")
+        .textContent =
+        timestamp.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit"
+        });
+}
+
+function initializeRadarControls() {
+    const previousButton =
+        document.getElementById("radar-prev");
+
+    const playButton =
+        document.getElementById("radar-play");
+
+    const nextButton =
+        document.getElementById("radar-next");
+
+    previousButton.addEventListener("click", function () {
+        stopRadarAnimation();
+
+        currentRadarFrame--;
+
+        if (currentRadarFrame < 0) {
+            currentRadarFrame = radarFrames.length - 1;
+        }
+
+        displayRadarFrame(currentRadarFrame);
+        playButton.textContent = "▶";
+    });
+
+    playButton.addEventListener("click", function () {
+        if (radarIsPlaying) {
+            stopRadarAnimation();
+            playButton.textContent = "▶";
+        } else {
+            startRadarAnimation();
+            playButton.textContent = "⏸";
+        }
+    });
+
+    nextButton.addEventListener("click", function () {
+        stopRadarAnimation();
+
+        currentRadarFrame++;
+
+        if (currentRadarFrame >= radarFrames.length) {
+            currentRadarFrame = 0;
+        }
+
+        displayRadarFrame(currentRadarFrame);
+        playButton.textContent = "▶";
+    });
 }
 
 
@@ -559,8 +649,11 @@ expandMapButton.addEventListener("click", () => {
         isFullscreen
     );
 
-    expandMapButton.textContent =
-        isFullscreen ? "X" : "⛶";
+    const fullscreenIcon =
+        expandMapButton.querySelector(".fullscreen-icon");
+
+    fullscreenIcon.textContent =
+        isFullscreen ? "⛶" : "⛶";
 
     expandMapButton.setAttribute(
         "aria-label",
@@ -590,6 +683,8 @@ requestWeatherLocation();
 initializeRadarMap();
 
 initializeWeatherRadar();
+
+initializeRadarControls();
 
 initializeLightning();
 

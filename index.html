@@ -27,51 +27,60 @@
     
     <main>
 
-            <section class="panel weather-panel">
-                <h2>Weather</h2>
+        <section class="panel weather-panel">
+            <h2>Weather</h2>
 
-                <p id="weather-status">Requesting location...</p>
+            <p id="weather-status">Requesting location...</p>
 
-                <div id="weather-data" class="weather-data">
-                    <div id="weather-temperature">--°F</div>
-                    <div id="weather-condition">Waiting...</div>
+            <div id="weather-data" class="weather-data">
+                <div id="weather-temperature">--°F</div>
+                <div id="weather-condition">Waiting...</div>
 
-                    <p>Feels like: <span id="weather-feels-like">--°F</span></p> 
-                    <p>Humidity: <span id="weather-humidity">--%</span></p>
-                    <p>Wind: <span id="weather-wind">-- mph</span></p>
-                    <p>Gusts: <span id="weather-gusts">-- mph</span></p>   
-                </div>
+                <p>Feels like: <span id="weather-feels-like">--°F</span></p> 
+                <p>Humidity: <span id="weather-humidity">--%</span></p>
+                <p>Wind: <span id="weather-wind">-- mph</span></p>
+                <p>Gusts: <span id="weather-gusts">-- mph</span></p>
+            </div>
                 
-            </section>
+        </section>
 
-            <section class="panel">
-                <h2>Radio Scanner</h2>
-                <p>Loading...</p>
-            </section>
+        <section class="panel">
+            <h2>Radio Scanner</h2>
+            <p>Loading...</p>
+        </section>
             
-            <section class="panel">
-                <h2>System Status</h2>
-                <p>Online</p>
-            </section>
+        <section class="panel">
+            <h2>System Status</h2>
+            <p>Online</p>
+        </section>
 
-            <section class="panel radar-panel" id="radar-panel">
-                <div class="panel-heading">
-                    <h2>Radar</h2>
+        <section class="panel radar-panel" id="radar-panel">
+            <div class="panel-heading">
+                <h2>Radar</h2>
+            </div>
 
-                    <button
-                        id="expand-map-btn"
-                        type="button"
-                        aria-label="Expand radar map"
-                        title="Expand radar map"
-                    >
-                        <i class="fa-solid fa-expand"></i>
-                        </button>    
-                </div>
+            <div class="radar-map-container">
+            <div id="radar-map"></div>
 
-                <div id="radar-map"></div>
+            <p id="radar-status">Initializing map...</p>
 
-                <p id="radar-status">Initializing map...</p>
-            </section>
+            <div id="radar-controls">
+                <span id="radar-timestamp">Loading...</span>
+
+                <button id="radar-prev">⏮️</button>
+                <button id="radar-play" aria-label="Pause radar animation">⏸️</button>
+                <button id="radar-next">⏭️</button>
+
+                <button
+                    id="expand-map-btn"
+                    type="button"
+                    aria-label="Expand radar map"
+                    title="Expand radar map"
+                >
+                    <span class="fullscreen-icon">⛶</span>
+                </button>
+            </div>
+        </section>
 
             <section class="panel">
                 <h2>Alerts</h2>

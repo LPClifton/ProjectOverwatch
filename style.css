@@ -76,6 +76,10 @@ main {
     margin: 5px 0;
 }
 
+.radar-map-container {
+    position: relative;
+}
+
 .map-panel {
     grid-column: span 2;
 }
@@ -142,18 +146,15 @@ main {
 }
 
 #expand-map-btn {
-    width: 38px;
-    height: 38px;
+    position: static;
+}
 
-    border: 1px solid #4fd5ff;
-    border-radius: 6px;
-
-    background: rgba(0, 0, 0, 0.75);
+#expand-map-btn .fullscreen-icon {
+    display: block;
     color: #4fd5ff;
-
-    font-size: 20px;
+    font-size: 22 px;
     line-height: 1;
-    cursor: pointer;
+    font-weight: bold;
 }
 
 #expand-map-btn:hover {
@@ -196,6 +197,14 @@ body.map-open {
     display: none;
 }
 
+#radar-panel.fullscreen-map .radar-map-container {
+    position: absolute;
+    inset: 0;
+
+    width: 100%;
+    height: 100%;
+}
+
 #radar-panel.fullscreen-map #radar-map {
     position: absolute;
     inset: 0;
@@ -207,25 +216,6 @@ body.map-open {
     border-radius: 0;
 }
 
-#radar-panel.fullscreen-map #expand-map-btn {
-    position: fixed;
-    top: 16px;
-    right: 16px;
-
-    width: 44px;
-    height: 44px;
-
-    z-index: 20000;
-
-    border: 1px solid #4fd5ff;
-    border-radius: 8px;
-
-    background: rgba(5, 9, 13, 0.85);
-    color: #4fd5ff;
-
-    font-size: 20px;
-    font-weight: bold;
-}
 
 #radar-panel.fullscreen-map {
     position: fixed !important;
@@ -254,3 +244,89 @@ body.map-open {
 
     z-index: 9999;
 }
+
+#radar-panel.fullscreen-map #radar-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+
+    margin: 0;
+    padding: 10px 14px;
+
+    border: 1px solid rgba(79, 213, 255, 0.25);
+    border-radius: 14px;
+
+    background: rgba(5, 9, 13, 0.45);
+
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+
+    z-index: 20000;
+}
+
+#radar-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+
+    margin-top: 8px;
+}
+
+#radar-controls button {
+    width: 44px;
+    height: 44px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 0;
+
+    border: 1px solid rgba(79, 213, 255, 0.65);
+    border-radius: 50%;
+
+    background: rgba(5, 9, 13, 0.72);
+    color: #4fd5ff;
+
+    font-size: 19px;
+    cursor: pointer;
+
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+
+    transition:
+        background 0.2s ease,
+        transform 0.2s ease,
+        border-color 0.2s ease;
+}
+
+#radar-controls button:hover {
+    background: rgba(79, 213, 255, 0.18);
+    border-color: #4fd5ff;
+}
+
+#radar-controls button:active {
+    transform: scale(0.92);
+}
+
+#radar-timestamp {
+    position: static;
+
+    padding: 8px 12px;
+
+    border: 1px solid rgba(79, 213, 255, 0.45);
+    border-radius: 8px;
+
+    background: rgba(5, 9, 13, 0.72);
+    color: #d9f7ff;
+
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
