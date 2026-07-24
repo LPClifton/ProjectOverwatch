@@ -20,6 +20,11 @@ let weatherRadar;
 let lightningLayer;
 let warningsLayer;
 let layerControl;
+let radarFrames = [];
+let currentRadarFrame = 0;
+let radarAnimationTimer = null;
+
+const RADAR_FRAME_DELAY = 900; // milliseconds
 
 let warningsRefreshTimer;
 
@@ -284,26 +289,44 @@ function initializeRadarMap() {
 async function initializeWeatherRadar() {
     console.log("Loading weather radar...");
 
-    const response = await fetch(
-        "https://api.rainviewer.com/public/weather-maps.json"
-    );
+    try {
+        const response = await fetch(
+            "https://api.rainviewer.com/public/weather-maps.json"
+        );
 
-    const radarData = await response.json();
+        const radarData = await response.json();
 
-    const latestFrame = 
-        radarData.radar.past[
-            radarData.radar.past.length - 1
-        ];
+        radarFrames = radarData.radar.past;
 
-    console.log(latestFrame);
-    
-    const radarTileUrl =
-        radarData.host +
-        latestFrame.path +
-        "/256/{z}/{x}/{y}/2/1_1.png";
+        console.log("Radar frames loaded:", radarFrames);
 
-    console.log(radarTileUrl);
-    
+        currentRadarFrame = 0;
+
+        displayRadarFrame(currentRadarFrame);
+        startRadarAnimation();
+    } catch (error) {
+        console.error("Weather radar failed to load:", error);
+    }
+}
+
+function displayRadarFrame(frameIndex) {
+    const frame = radarFrames[frameIndex];
+
+    if (!frame) {
+        return;
+
+    }
+
+    const radarTileUrl = 
+    "https://tilecache.rainviewer.com" +
+    frame.path +
+    "/256/{z}/{x}/{y}/2/1_1.png";
+
+    if (weatherRadar) {
+        radarMap.removeLayer(weatherRadar);
+
+    }
+
     weatherRadar = L.tileLayer(radarTileUrl, {
         tileSize: 256,
         opacity: RADAR_OPACITY,
@@ -312,7 +335,25 @@ async function initializeWeatherRadar() {
         attribution: "RainViewer"
     });
 
-    weatherRadar.addTo(radarMap);
+    weatherRadar.addTo(radarMap)
+}
+
+function startRadarAnimation() {
+    if (radarAnimationTimer) {
+        clearInterval(radarAnimationTimer);
+    }
+
+    radarAnimationTimer = setInterval(() => {
+        currentRadarFrame++;
+
+        if (currentRadarFrame >= radarFrames.length) {
+            currentRadarFrame = 0;
+        }
+
+        console.log("Displaying radar frame:", currentRadarFrame)
+
+        displayRadarFrame(currentRadarFrame);
+    }, RADAR_FRAME_DELAY);
 }
 
 // ====================================
