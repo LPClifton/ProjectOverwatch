@@ -34,6 +34,7 @@ let radarAnimationPaused = false;
 let radarIsPlaying = true;
 
 let currentHeading = null;
+let currentSpeedMph = 0;
 
 
 let warningsRefreshTimer;
@@ -277,6 +278,53 @@ function calculateBearing(
     return (bearing + 360) % 360;
 }
 
+function calculateRelativeAngle(
+    vehicleHeading,
+    targetBearing
+) {
+    return (
+        (targetBearing - vehicleHeading + 540) % 360
+    ) - 180;
+}
+
+function classifyRelativeDirection(
+    vehicleHeading,
+    targetBearing
+) {
+    if (vehicleHeading === null) {
+        return "Direction Unknown";
+    }
+
+    const relativeAngle =
+        calculateRelativeAngle(
+            vehicleHeading,
+            targetBearing
+        );
+
+    if (
+        relativeAngle >= -45 &&
+        relativeAngle <= 45
+    ) {
+        return "Ahead";
+    }
+
+    if (
+        relativeAngle > 45 &&
+        relativeAngle < 135
+    ) {
+        return "Right";
+    }
+
+    if (
+        relativeAngle < -45 &&
+        relativeAngle > -135
+    ) {
+        return "Left";
+    }
+
+    return "Behind";
+}
+
 function bearingToCompass(bearing) {
     const compassDirections = [
         "North",
@@ -363,7 +411,7 @@ function initializeRadarMap() {
 
     radarStatus.textContent = "Requesting Location";
 
-    if ('geolocation'in navigator) {
+    if ("geolocation" in navigator) {
         navigator.geolocation.watchPosition(
             function (position) {
                 const latitude = position.coords.latitude;
@@ -372,9 +420,19 @@ function initializeRadarMap() {
                 currentLatitude = latitude;
                 currentLongitude = longitude;
 
+                const speedMetersPerSecond = 
+                    position.coords.speed;
+
+                if (speedMetersPerSecond !== null) {
+                    currentSpeedMph =
+                        speedMetersPerSecond * 2.23694;
+                } else {
+                    currentSpeedMph = 0;
+                }
+
                 if (position.coords.heading !== null) {
                     currentHeading = position.coords.heading;
-                } 
+                }
 
                 console.log(
                     "Heading:",
@@ -384,13 +442,20 @@ function initializeRadarMap() {
                 const systemStatus = 
                     document.getElementById("system-status-text");
 
-                const headingText = 
+                const headingText =
                     currentHeading === null
-                        ? "Stationary"
-                        : `${Math.round(currentHeading)}° (${bearingToCompass(currentHeading)})`;
-                        
-                systemStatus.textContent =
-                    `GPS OK | Heading: ${headingText}`;        
+                    ? "Unavailable"
+                    : `${Math.round(currentHeading)}° (${bearingToCompass(currentHeading)})`;
+
+                const movementStatus =
+                    currentSpeedMph < 2
+                    ? "Stopped"
+                    : `${Math.round(currentSpeedMph)} MPH`;
+
+                if (systemStatus) {
+                    systemStatus.textContent =
+                        `GPS OK | ${movementStatus} | Heading: ${headingText}`;
+                }        
 
                 if (!warningsRefreshTimer) {
                     initializeWarnings();
