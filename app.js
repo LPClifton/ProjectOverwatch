@@ -381,6 +381,17 @@ function initializeRadarMap() {
                     currentHeading
                 );
 
+                const systemStatus = 
+                    document.getElementById("system-status-text");
+
+                const headingText = 
+                    currentHeading === null
+                        ? "Stationary"
+                        : `${Math.round(currentHeading)}° (${bearingToCompass(currentHeading)})`;
+                        
+                systemStatus.textContent =
+                    `GPS OK | Heading: ${headingText}`;        
+
                 if (!warningsRefreshTimer) {
                     initializeWarnings();
                 }
