@@ -33,6 +33,8 @@ let radarAnimationTimer = null;
 let radarAnimationPaused = false;
 let radarIsPlaying = true;
 
+let currentHeading = null;
+
 
 let warningsRefreshTimer;
 
@@ -370,6 +372,19 @@ function initializeRadarMap() {
                 currentLatitude = latitude;
                 currentLongitude = longitude;
 
+                if (position.coords.heading !== null) {
+                    currentHeading = position.coords.heading;
+                } 
+
+                console.log(
+                    "Heading:",
+                    currentHeading
+                );
+
+                if (!warningsRefreshTimer) {
+                    initializeWarnings();
+                }
+
                 if (!locationMarker) {
                     locationMarker = L.marker([latitude, longitude])
                     .addTo(radarMap)
@@ -702,8 +717,22 @@ function initializeWarnings() {
 }
 
 async function loadNwsWarnings () {
-    const warningsUrl = 
-        "https://api.weather.gov/alerts/active?area=TX";
+    if (
+        currentLatitude === null ||
+        currentLongitude === null
+    ) {
+        console.log(
+            "Sentinel waiting for GPS before loading NWS warnings."
+        );
+
+        return;
+    }
+
+    const warningsUrl =
+    "https://api.weather.gov/alerts/active?point=" +
+    `${currentLatitude},${currentLongitude}`;
+
+        console.log("NWS warning URL:", warningsUrl);
 
         try {
             const response = await fetch(warningsUrl, {
@@ -721,7 +750,7 @@ async function loadNwsWarnings () {
             const warningData = await response.json();
 
             warningsLayer.clearLayers();
-            notificationManager.beginRefresh();
+            notificationManager.beginRefresh("NWS");
 
             let nearbyAlertCount = 0;
 
@@ -844,7 +873,7 @@ async function loadNwsWarnings () {
                 }
             }).addTo(warningsLayer);
 
-            notificationManager.endRefresh();
+            notificationManager.endRefresh("NWS");
 
             console.log(
                 `NWS alerts loaded: ${warningData.features.length}`
@@ -1000,7 +1029,7 @@ initializeRadarControls();
 
 initializeLightning();
 
-initializeWarnings();
+
 
 
 
