@@ -45,16 +45,21 @@
         </section>
 
         <section class="panel">
-            <h2>Radio Scanner</h2>
-            <p>Loading...</p>
-        </section>
-            
-        <section class="panel">
             <h2>System Status</h2>
             <p id="system-status-text">Online</p>
         </section>
 
-        <section class="panel radar-panel" id="radar-panel">
+        <section class="panel">
+            <h2>Radio Scanner</h2>
+            <p>Loading...</p>
+        </section>
+
+        <section class="panel">
+            <h2>Alerts</h2>
+            <p id="alerts-status">None</p>
+        </section>
+
+        <section class="panel map-panel" id="map-panel">
             <div class="panel-heading">
                 <h2>Map</h2>
             </div>
@@ -64,7 +69,7 @@
 
             <p id="radar-status">Initializing map...</p>
 
-            <div id="radar-controls">
+            <div id="map-controls">
                 <span id="radar-timestamp">Loading...</span>
 
                 <button id="radar-prev">⏮️</button>
@@ -74,8 +79,8 @@
                 <button
                     id="expand-map-btn"
                     type="button"
-                    aria-label="Expand radar map"
-                    title="Expand radar map"
+                    aria-label="Expand map"
+                    title="Expand map"
                 >
                     <span class="fullscreen-icon">⛶</span>
                 </button>
@@ -83,38 +88,38 @@
             </div>
         </section>
 
-            <section class="panel">
-                <h2>Alerts</h2>
-                <p id="alerts-status">None</p>
-            </section>
+        <section class="panel">
+            <h2>Notes</h2>
+            <p>No Notes.</p>
+        </section>
 
-            <section class="panel">
-                <h2>Clock</h2>
-                <p id="clock">--:--:--</p>
-            </section>
+        <section class="panel">
+            <h2>Camera</h2>
+            <p>Offline</p>
+        </section>
 
-            <section class="panel">
-                <h2>Notes</h2>
-                <p>No Notes.</p>
-            </section>
-
-            <section class="panel">
-                <h2>Camera</h2>
-                <p>Offline</p>
-            </section>
-
-            <section class="panel">
-                <h2>Tools</h2>
-                <p>Ready</p>
-            </section>
+        <section class="panel">
+            <h2>Tools</h2>
+            <p>Ready</p>
+        </section>
 
     </main>
 
     <footer id="system-footer">
-        <span>Project Overwatch v0.3.0</span>
-        <span id="build-date">Build: 2026-07-25</span>
-        <span id="system-status">Status: Operational</span>
-    </footer>
+    <span id="version-status">Project Overwatch v0.3.0</span>
+
+    <span id="build-date">
+        Build: 2026-07-25
+    </span>
+
+    <span id="system-status">
+        Status: Operational
+    </span>
+
+    <time id="clock" datetime="">
+        --:--:--
+    </time>
+</footer>
 
 </div>
 

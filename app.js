@@ -194,20 +194,52 @@ function updateNavigationDisplay() {
 // =============================
 
 function updateClock() {
+    const clockElement =
+        document.getElementById("clock");
+
+    if (!clockElement) {
+        return;
+    }
+
     const now = new Date();
 
-    const time = now.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit"
-    });
+    clockElement.textContent =
+        now.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false
+        });
 
-    document.getElementById("clock").textContent = time;
+    clockElement.dateTime = now.toISOString();
+}
+// =============================
+// GPS Functions
+// =============================
+
+function updateSystemStatus() {
+    const systemStatus =
+        document.getElementById("system-status-text");
+
+    if (!systemStatus) {
+        return;
+    }
+
+    const headingText =
+        currentHeading === null
+            ? "Heading Unavailable"
+            : `${Math.round(currentHeading)}° ` +
+              `${bearingToCompass(currentHeading)}`;
+
+    const movementText =
+        currentSpeedMph < 2
+            ? "Stopped"
+            : `${Math.round(currentSpeedMph)} MPH`;
+
+    systemStatus.textContent =
+        `GPS ONLINE • ${movementText} • ${headingText}`;
 }
 
-
-
-setInterval(updateClock, 1000);
 
 // =============================
 // Weather Functions
@@ -540,25 +572,7 @@ function initializeMap() {
                 console.log(
                     "Heading:",
                     currentHeading
-                );
-
-                const systemStatus = 
-                    document.getElementById("system-status-text");
-
-                const headingText =
-                    currentHeading === null
-                    ? "Unavailable"
-                    : `${Math.round(currentHeading)}° (${bearingToCompass(currentHeading)})`;
-
-                const movementStatus =
-                    currentSpeedMph < 2
-                    ? "Stopped"
-                    : `${Math.round(currentSpeedMph)} MPH`;
-
-                if (systemStatus) {
-                    systemStatus.textContent =
-                        `GPS OK | ${movementStatus} | Heading: ${headingText}`;
-                }        
+                );     
 
                 if (!warningsRefreshTimer) {
                     initializeWarnings();
@@ -1184,14 +1198,14 @@ expandMapButton.addEventListener("click", () => {
     expandMapButton.setAttribute(
         "aria-label",
         isFullscreen
-            ? "Close full screen radar map"
-            : "Expand radar map"
+            ? "Close full screen map"
+            : "Expand map"
     );
 
     expandMapButton.title =
         isFullscreen
-            ? "Close full screen radar map"
-            : "Expand radar map";
+            ? "Close full screen map"
+            : "Expand map";
 
     setTimeout(() => {
         radarMap.invalidateSize();
@@ -1203,6 +1217,7 @@ expandMapButton.addEventListener("click", () => {
 // ===================================
 
 updateClock();
+setInterval(updateClock, 1000)
 
 updateAlertsPanel();
 
