@@ -37,7 +37,6 @@ let layerControl;
 let radarFrames = [];
 let currentRadarFrame = 0;
 let radarAnimationTimer = null;
-let radarAnimationPaused = false;
 let radarIsPlaying = true;
 
 
@@ -115,7 +114,7 @@ const notificationManager = {
     getAlerts() {
         return this.alerts;
     }
-}
+};
 
 // =============================
 // Movement Functions
@@ -493,12 +492,12 @@ function degreesToRadians(degrees) {
 // ================================
 
 function initializeMap() {
-    const radarStatus = document.getElementById("radar-status");
+    const mapStatus = document.getElementById("map-status");
 
     const defaultLatitude = DEFAULT_LATITUDE;
     const defaultLongitude = DEFAULT_LONGITUDE;
 
-    radarMap = L.map("radar-map", {
+    radarMap = L.map("map", {
         rotate: true
     }).setView(
         [defaultLatitude, defaultLongitude],
@@ -544,7 +543,7 @@ function initializeMap() {
             .openOn(radarMap);
     });
 
-    radarStatus.textContent = "Requesting Location";
+    mapStatus.textContent = "Requesting Location";
 
     if ("geolocation" in navigator) {
         navigator.geolocation.watchPosition(
@@ -596,6 +595,7 @@ function initializeMap() {
 
                 updateMovementIcon();
                 updateNavigationDisplay();
+                updateSystemStatus();
 
                 const accuracy = position.coords.accuracy;
 
@@ -613,14 +613,14 @@ function initializeMap() {
             
                 const accuracyFeet = position.coords.accuracy * 3.28084;
 
-                radarStatus.textContent = 
+                mapStatus.textContent = 
                     `GPS ONLINE ⏺ ACCURACY ±${Math.round(accuracyFeet)} FT`;
             },
 
             function (error) {
                 console.error("GPS error:", error.code, error.message);
 
-                radarStatus.textContent = 
+                mapStatus.textContent = 
                 `GPS ERROR ${error.code} ⏺ ${error.message}`;
 
                 if (!locationMarker) {
@@ -637,11 +637,11 @@ function initializeMap() {
             {
                 enableHighAccuracy: true,
                 maximumAge: 0,
-                timeout: 1000
+                timeout: 10000
             }
         );
     } else {
-        radarStatus.textContent = "GPS Unsupported";
+        mapStatus.textContent = "GPS Unsupported";
 
         locationMarker = L.marker([
             defaultLatitude,
@@ -776,6 +776,10 @@ function initializeRadarControls() {
         document.getElementById("radar-next");
 
     previousButton.addEventListener("click", function () {
+        if (radarFrames.length === 0) {
+            return;
+        }
+
         stopRadarAnimation();
 
         currentRadarFrame--;
@@ -789,6 +793,10 @@ function initializeRadarControls() {
     });
 
     playButton.addEventListener("click", function () {
+        if (radarFrames.length === 0) {
+            return;
+        }
+
         if (radarIsPlaying) {
             stopRadarAnimation();
             playButton.textContent = "▶";
@@ -799,6 +807,10 @@ function initializeRadarControls() {
     });
 
     nextButton.addEventListener("click", function () {
+        if (radarFrames.length === 0) {
+            return;
+        }
+
         stopRadarAnimation();
 
         currentRadarFrame++;
@@ -1177,23 +1189,17 @@ function formatAlertTime(timeString) {
 const expandMapButton =
     document.getElementById("expand-map-btn");
 
-const radarPanel =
-    document.getElementById("radar-panel");
+const mapPanel =
+    document.getElementById("map-panel");
 
-expandMapButton.addEventListener("click", () => {
+expandMapButton.addEventListener("click", function () {
     const isFullscreen =
-        radarPanel.classList.toggle("fullscreen-map");
+        mapPanel.classList.toggle("fullscreen-map");
 
     document.body.classList.toggle(
         "map-open",
         isFullscreen
     );
-
-    const fullscreenIcon =
-        expandMapButton.querySelector(".fullscreen-icon");
-
-    fullscreenIcon.textContent =
-        isFullscreen ? "⛶" : "⛶";
 
     expandMapButton.setAttribute(
         "aria-label",
@@ -1207,7 +1213,7 @@ expandMapButton.addEventListener("click", () => {
             ? "Close full screen map"
             : "Expand map";
 
-    setTimeout(() => {
+    setTimeout(function () {
         radarMap.invalidateSize();
     }, 100);
 });

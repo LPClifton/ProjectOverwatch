@@ -64,28 +64,40 @@
                 <h2>Map</h2>
             </div>
 
-            <div class="radar-map-container">
-            <div id="radar-map"></div>
+            <div class="map-container">
+                <div id="map"></div>
 
-            <p id="radar-status">Initializing map...</p>
+                <p id="map-status">Initializing map...</p>
 
-            <div id="map-controls">
-                <span id="radar-timestamp">Loading...</span>
+                <div id="map-controls">
+                    <span id="radar-timestamp">Loading...</span>
 
-                <button id="radar-prev">⏮️</button>
-                <button id="radar-play" aria-label="Pause radar animation">⏸️</button>
-                <button id="radar-next">⏭️</button>
+                    <button id="radar-prev" type="button" aria-label="Previous radar frame">
+                        ⏮️
+                    </button>
 
-                <button
-                    id="expand-map-btn"
-                    type="button"
-                    aria-label="Expand map"
-                    title="Expand map"
-                >
-                    <span class="fullscreen-icon">⛶</span>
-                </button>
-            </div>
-            </div>
+                    <button
+                        id="radar-play"
+                        type="button"
+                        aria-label="Pause radar animation"
+                    >
+                        ⏸️
+                    </button>
+
+                    <button id="radar-next" type="button" aria-label="Next radar frame">
+                        ⏭️
+                    </button>
+
+                    <button
+                        id="expand-map-btn"
+                        type="button"
+                        aria-label="Expand map"
+                        title="Expand map"
+                    >
+                        <span class="fullscreen-icon">⛶</span>
+                    </button>
+                </div>
+         </div>
         </section>
 
         <section class="panel">
