@@ -15,6 +15,9 @@ const RADAR_END_PAUSE = 2000;
 
 const SENTINEL_RADIUS_MILES = 1000;
 
+const DEFAULT_SYSTEM_ACCENT = "#4fd5ff";
+const ALERT_FLASH_DURATION = 3000;
+
 
 // =============================
 // Global Variables
@@ -115,6 +118,19 @@ const notificationManager = {
         return this.alerts;
     }
 };
+
+function flashSystemAccent(alertColor) {
+    const root = document.documentElement;
+
+    root.style.setProperty("--system-accent", alertColor);
+
+    setTimeout(() => {
+        root.style.setProperty(
+            "--system-accent",
+            DEFAULT_SYSTEM_ACCENT
+        );
+    }, ALERT_FLASH_DURATION);
+}
 
 // =============================
 // Movement Functions
@@ -829,6 +845,16 @@ function initializeRadarControls() {
 // Alerts
 // =====================================
 
+const alertsPanel =
+    document.getElementById("alerts-panel");
+
+alertsPanel.classList.remove(
+    "alert-clear",
+    "alert-medium",
+    "alert-high",
+    "alert-critical"
+);
+
 function updateAlertsPanel() {
     const alertsStatus =
         document.getElementById("alerts-status");
@@ -838,6 +864,8 @@ function updateAlertsPanel() {
 
     if (alerts.length === 0) {
         alertsStatus.textContent = "🟢 All Clear";
+
+        alertsPanel.classList.add("alert-clear");
         return;
     }
 
@@ -856,6 +884,24 @@ function updateAlertsPanel() {
     });
 
     const highestAlert = alerts[0];
+
+    switch (highestAlert.priority) {
+
+        case "critical":
+            alertsPanel.classList.add("alert-critical");
+            break;
+
+        case "high":
+            alertsPanel.classList.add("alert-high");
+            break;
+
+        case "medium":
+            alertsPanel.classList.add("alert-medium");
+             break;
+
+        default:
+            alertsPanel.classList.add("alert-clear");
+    }  
 
     alertsStatus.textContent =
         `${highestAlert.icon} ${highestAlert.title} — ` +

@@ -1,8 +1,13 @@
+:root {
+
+    --system-accent: #4fd5ff;
+}
+
 body {
     padding-bottom: 52px;
     margin: 0;
     background-color: black;
-    color: #00ff88;
+    color: var(--system-accent);
     font-family: Arial, Helvetica, sans-serif;
 
 }
@@ -33,7 +38,7 @@ main {
 }
 
 .panel {
-    border: 2px solid #00ff88;
+border: 2px solid var(--system-accent, #4fd5ff);
     border-radius: 8px;
     background: #111;
     padding: 20px;
@@ -43,7 +48,7 @@ main {
 }
 
 .panel:hover {
-    box-shadow: 0 0 20px #00ff88;
+    box-shadow: 0 0 20px var(--system-accent);
     transform: scale(1.02);
 }
 
@@ -58,7 +63,7 @@ main {
 #weather-temperature {
     font-size: 2.5rem;
     font-weight: bold;
-    color: #00ff88;
+    color: var(--system-accent);
 }
 
 #weather-condition {
@@ -197,7 +202,7 @@ main {
 
 #expand-map-btn .fullscreen-icon {
     display: block;
-    color: #4fd5ff;
+    color: var(--system-accent);
     font-size: 22px;
     line-height: 1;
     font-weight: bold;
@@ -302,11 +307,11 @@ body.map-open {
 
     padding: 0;
 
-    border: 1px solid rgba(79, 213, 255, 0.65);
+    border: 1px solid var(--system-accent);
     border-radius: 50%;
 
     background: rgba(5, 9, 13, 0.72);
-    color: #4fd5ff;
+    color: var(--system-accent);
 
     font-size: 19px;
     cursor: pointer;
@@ -317,7 +322,8 @@ body.map-open {
     transition:
         background 0.2s ease,
         transform 0.2s ease,
-        border-color 0.2s ease;
+        border-color 0.2s ease,
+        color 0.2s ease;
 }
 
 #map-controls button:hover {
@@ -374,24 +380,24 @@ body.map-open {
 }
 
 .vehicle-marker {
-    color: #4fd5ff;
+    color: var(--system-accent);
     font-size: 28px;
     text-shadow:
         0 0 4px #000,
-        0 0 8px #4fd5ff;
+        0 0 8px var(--system-accent);
 }
 
 .stationary-marker {
     width: 16px;
     height: 16px;
 
-    background: #4fd5ff;
+    background: var(--system-accent);
     border: 3px solid #ffffff;
     border-radius: 50%;
 
     box-shadow:
         0 0 4px #000000,
-        0 0 10px #4fd5ff;
+        0 0 10px var(--system-accent);
 }
 
 @media (max-width: 850px) {
@@ -415,3 +421,38 @@ body.map-open {
         align-self: center;
     }
 }
+
+/* ================================
+   Alert Panel States
+================================ */
+
+#alerts-panel {
+    transition:
+        border-color 0.25s ease,
+        box-shadow 0.25s ease,
+        transform 0.25s ease;
+}
+
+#alerts-panel.alert-clear {
+    border-color: var(--system-accent);
+}
+
+#alerts-panel.alert-medium {
+    border-color: #ffd700;
+    box-shadow: 0 0 14px rgba(255,215,0,0.35);
+}
+
+#alerts-panel.alert-high {
+    border-color: #ff8c00;
+    box-shadow: 0 0 16px rgba(255,140,0,0.45);
+}
+
+#alerts-panel.alert-critical {
+    border-color: #ff3030;
+    box-shadow: 0 0 20px rgba(255,48,48,0.60);
+}
+
+/* ================================
+   System-Wide Alert Flash
+================================ */
+
