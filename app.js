@@ -51,6 +51,155 @@ let tempestSocket;
 let tempestReconnectTimer;
 
 // =============================
+// Utility Functions
+// =============================
+
+function calculateDistanceMiles(
+    latitude1,
+    longitude1,
+    latitude2,
+    longitude2
+) {
+    const earthRadiusMiles = 3958.8;
+
+    const latitudeDifference =
+        degreesToRadians(latitude2 - latitude1);
+
+    const longitudeDifference =
+        degreesToRadians(longitude2 - longitude1);
+
+    const startLatitude =
+        degreesToRadians(latitude1);
+
+    const endLatitude =
+        degreesToRadians(latitude2);
+
+    const a =
+        Math.sin(latitudeDifference / 2) ** 2 +
+        Math.cos(startLatitude) *
+        Math.cos(endLatitude) *
+        Math.sin(longitudeDifference / 2) ** 2;
+
+    const c =
+        2 * Math.atan2(
+            Math.sqrt(a),
+            Math.sqrt(1 - a)
+        );
+
+    return earthRadiusMiles * c;
+}
+
+function calculateBearing(
+    latitude1,
+    longitude1,
+    latitude2,
+    longitude2
+) {
+    const startLatitude =
+        degreesToRadians(latitude1);
+
+    const endLatitude =
+        degreesToRadians(latitude2);
+
+    const longitudeDifference =
+        degreesToRadians(longitude2 - longitude1);
+
+    const y =
+        Math.sin(longitudeDifference) *
+        Math.cos(endLatitude);
+
+    const x =
+        Math.cos(startLatitude) *
+        Math.sin(endLatitude) -
+        Math.sin(startLatitude) *
+        Math.cos(endLatitude) *
+        Math.cos(longitudeDifference);
+
+    const bearing =
+        Math.atan2(y, x) *
+        (180 / Math.PI);
+
+    return (bearing + 360) % 360;
+}
+
+function calculateRelativeAngle(
+    vehicleHeading,
+    targetBearing
+) {
+    return (
+        (targetBearing - vehicleHeading + 540) % 360
+    ) - 180;
+}
+
+function classifyRelativeDirection(
+    vehicleHeading,
+    targetBearing
+) {
+    if (vehicleHeading === null) {
+        return "Direction Unknown";
+    }
+
+    const relativeAngle =
+        calculateRelativeAngle(
+            vehicleHeading,
+            targetBearing
+        );
+
+    if (
+        relativeAngle >= -45 &&
+        relativeAngle <= 45
+    ) {
+        return "Ahead";
+    }
+
+    if (
+        relativeAngle > 45 &&
+        relativeAngle < 135
+    ) {
+        return "Right";
+    }
+
+    if (
+        relativeAngle < -45 &&
+        relativeAngle > -135
+    ) {
+        return "Left";
+    }
+
+    return "Behind";
+}
+
+function bearingToCompass(bearing) {
+    const compassDirections = [
+        "North",
+        "NNE",
+        "NE",
+        "ENE",
+        "East",
+        "ESE",
+        "SE",
+        "SSE",
+        "South",
+        "SSW",
+        "SW",
+        "WSW",
+        "West",
+        "WNW",
+        "NW",
+        "NNW"
+    ];
+
+    const index =
+        Math.round(bearing / 22.5) % 16;
+
+    return compassDirections[index];
+}
+
+function degreesToRadians(degrees) {
+    return degrees * (Math.PI / 180);
+}
+
+// =============================
 // Map Marker Icons
 // =============================
 
@@ -299,7 +448,7 @@ function updateAlertsPanel() {
 }
 
 // =============================
-// Movement Functions
+// Navigation Functions
 // =============================
 
 function updateMovementIcon() {
@@ -520,154 +669,15 @@ function requestWeatherLocation() {
     );
 }
 
-// ================================
+// =============================
 // Sentinel Functions
-// ================================
+// =============================
 
-function calculateDistanceMiles(
-    latitude1,
-    longitude1,
-    latitude2,
-    longitude2
-) {
-    const earthRadiusMiles = 3958.8;
-
-    const latitudeDifference =
-        degreesToRadians(latitude2 - latitude1);
-
-    const longitudeDifference =
-        degreesToRadians(longitude2 - longitude1);
-
-    const startLatitude =
-        degreesToRadians(latitude1);
-
-    const endLatitude =
-        degreesToRadians(latitude2);
-
-    const a =
-        Math.sin(latitudeDifference / 2) ** 2 +
-        Math.cos(startLatitude) *
-        Math.cos(endLatitude) *
-        Math.sin(longitudeDifference / 2) ** 2;
-
-    const c =
-        2 * Math.atan2(
-            Math.sqrt(a),
-            Math.sqrt(1 - a)
-        );
-
-    return earthRadiusMiles * c;
-}
-
-function calculateBearing(
-    latitude1,
-    longitude1,
-    latitude2,
-    longitude2
-) {
-    const startLatitude =
-        degreesToRadians(latitude1);
-
-    const endLatitude =
-        degreesToRadians(latitude2);
-
-    const longitudeDifference =
-        degreesToRadians(longitude2 - longitude1);
-
-    const y =
-        Math.sin(longitudeDifference) *
-        Math.cos(endLatitude);
-
-    const x =
-        Math.cos(startLatitude) *
-        Math.sin(endLatitude) -
-        Math.sin(startLatitude) *
-        Math.cos(endLatitude) *
-        Math.cos(longitudeDifference);
-
-    const bearing =
-        Math.atan2(y, x) *
-        (180 / Math.PI);
-
-    return (bearing + 360) % 360;
-}
-
-function calculateRelativeAngle(
-    vehicleHeading,
-    targetBearing
-) {
-    return (
-        (targetBearing - vehicleHeading + 540) % 360
-    ) - 180;
-}
-
-function classifyRelativeDirection(
-    vehicleHeading,
-    targetBearing
-) {
-    if (vehicleHeading === null) {
-        return "Direction Unknown";
-    }
-
-    const relativeAngle =
-        calculateRelativeAngle(
-            vehicleHeading,
-            targetBearing
-        );
-
-    if (
-        relativeAngle >= -45 &&
-        relativeAngle <= 45
-    ) {
-        return "Ahead";
-    }
-
-    if (
-        relativeAngle > 45 &&
-        relativeAngle < 135
-    ) {
-        return "Right";
-    }
-
-    if (
-        relativeAngle < -45 &&
-        relativeAngle > -135
-    ) {
-        return "Left";
-    }
-
-    return "Behind";
-}
-
-function bearingToCompass(bearing) {
-    const compassDirections = [
-        "North",
-        "NNE",
-        "NE",
-        "ENE",
-        "East",
-        "ESE",
-        "SE",
-        "SSE",
-        "South",
-        "SSW",
-        "SW",
-        "WSW",
-        "West",
-        "WNW",
-        "NW",
-        "NNW"
-    ];
-
-    const index =
-        Math.round(bearing / 22.5) % 16;
-
-    return compassDirections[index];
-}
-
-function degreesToRadians(degrees) {
-    return degrees * (Math.PI / 180);
-}
+// Route awareness
+// Threat evaluation
+// Corridor filtering
+// ETA calculations
+// Future implementation
 
 // ================================
 // Radar Functions
