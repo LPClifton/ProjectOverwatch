@@ -1381,13 +1381,14 @@ initializeRadarControls();
 
 initializeLightning();
 
-notificationManager.addAlert({
+/*notificationManager.addAlert({
     id: "housekeeping-test",
     source: "TEST",
     title: "Housekeeping Test Alert",
     priority: "medium",
     icon: "🚨"
 });
+*/
 
 
 
