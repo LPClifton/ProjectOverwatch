@@ -336,3 +336,48 @@ body.map-open {
     -webkit-backdrop-filter: blur(8px);
 }
 
+/* ================================
+    Map Marker Icons
+================================ */  
+
+.overwatch-location-icon,
+.overwatch-walking-icon,
+.overwatch-vehicle-icon {
+    background: transparent;
+    border: none;
+}
+
+.stationary-marker,
+.walking-marker,
+.vehicle-marker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 100%;
+    height: 100%;
+
+    font-size: 24px;
+    line-height: 1;
+}
+
+.vehicle-marker {
+    color: #4fd5ff;
+    font-size: 28px;
+    text-shadow:
+        0 0 4px #000,
+        0 0 8px #4fd5ff;
+}
+
+.stationary-marker {
+    width: 16px;
+    height: 16px;
+
+    background: #4fd5ff;
+    border: 3px solid #ffffff;
+    border-radius: 50%;
+
+    box-shadow:
+        0 0 4px #000000
+        0 0 10px #4fd5ff;
+}

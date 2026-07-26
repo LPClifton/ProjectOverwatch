@@ -6,6 +6,9 @@ const DEFAULT_LATITUDE = 30.3027;
 const DEFAULT_LONGITUDE = -93.1907;
 const DEFAULT_MAP_ZOOM = 9;
 
+const FOLLOW_SPEED_MPH = 5;
+const DRIVING_MAP_ZOOM = 14;
+
 const RADAR_OPACITY = 0.6;
 const RADAR_FRAME_DELAY = 900;
 const RADAR_END_PAUSE = 2000;
@@ -19,6 +22,10 @@ const SENTINEL_RADIUS_MILES = 1000;
 
 let currentLatitude = null;
 let currentLongitude = null;
+let currentHeading = null;
+let currentSpeedMph = 0;
+
+let drivingModeActivate = false;
 
 let radarMap;
 let locationMarker;
@@ -33,14 +40,38 @@ let radarAnimationTimer = null;
 let radarAnimationPaused = false;
 let radarIsPlaying = true;
 
-let currentHeading = null;
-let currentSpeedMph = 0;
+
 
 
 let warningsRefreshTimer;
 
 let tempestSocket;
 let tempestReconnectTimer;
+
+// =============================
+// Map Marker Icons
+// =============================
+
+const stationaryLocationIcon = L.divIcon({
+    className: "overwatch-location-icon",
+    html: `<div class="stationary-marker"></div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12]
+});
+
+const vehicleLocationIcon = L.divIcon({
+    className: "overwatch-vehicle-icon",
+    html: `<div class="vehicle-marker">▲</div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
+});
+
+const walkingLocationIcon = L.divIcon({
+    className: "overwatch-walking-icon",
+    html: `<div class="walking-marker">🚶🏻‍♂️</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
+});
 
 // =============================
 // Notification Manager
@@ -86,6 +117,76 @@ const notificationManager = {
     }
 }
 
+// =============================
+// Movement Functions
+// =============================
+
+function updateMovementIcon() {
+
+    if (!locationMarker) {
+        return;
+    }
+
+    let newIcon;
+
+    if (currentSpeedMph < 2) {
+        newIcon = stationaryLocationIcon;
+    } else if (currentSpeedMph < 8) {
+        newIcon = walkingLocationIcon;
+    } else {
+        newIcon = vehicleLocationIcon;
+    }
+
+    if (locationMarker.options.icon !== newIcon) {
+        locationMarker.setIcon(newIcon);
+    }
+
+    const markerElement = locationMarker.getElement();
+
+    if (!markerElement) {
+        return;
+    }
+
+    const vehicleMarker =
+        markerElement.querySelector(".vehicle-marker");
+
+    if (
+        vehicleMarker &&
+        currentHeading !== null
+    ) {
+        vehicleMarker.style.transform =
+            `rotate(${currentHeading}deg)`;
+    }
+}
+
+function updateNavigationDisplay() {
+    if (
+        !radarMap ||
+        currentLatitude === null ||
+        currentLongitude === null
+    ) {
+        return;
+    }
+
+    const isDriving =
+        currentSpeedMph >= 8 &&
+        currentHeading !== null;
+
+    if (isDriving) {
+        drivingModeActive = true;
+
+        radarMap.setView(
+            [currentLatitude, currentLongitude],
+            15,
+            {
+                animate: true
+            }
+        );
+
+    } else {
+        drivingModeActive = false;
+    }
+}
 
 
 // =============================
@@ -365,7 +466,9 @@ function initializeRadarMap() {
     const defaultLatitude = DEFAULT_LATITUDE;
     const defaultLongitude = DEFAULT_LONGITUDE;
 
-    radarMap = L.map("radar-map").setView(
+    radarMap = L.map("radar-map", {
+        rotate: true
+    }).setView(
         [defaultLatitude, defaultLongitude],
         DEFAULT_MAP_ZOOM
     );
@@ -462,16 +565,24 @@ function initializeRadarMap() {
                 }
 
                 if (!locationMarker) {
-                    locationMarker = L.marker([latitude, longitude])
-                    .addTo(radarMap)
-                    .bindPopup("Project Overwatch")
-                    .openPopup();
+                    locationMarker = L.marker(
+                        [latitude, longitude],
+                        {
+                            icon: stationaryLocationIcon
+                        }
+                    )
+                        .addTo(radarMap)
+                        .bindPopup("Project Overwatch")
+                        .openPopup();
 
                     radarMap.setView([latitude, longitude], 15);
                 } else {
                     locationMarker.setLatLng([latitude, longitude]);
-                } 
-                
+                }
+
+                updateMovementIcon();
+                updateNavigationDisplay();
+
                 const accuracy = position.coords.accuracy;
 
                 if (!accuracyCircle) {
