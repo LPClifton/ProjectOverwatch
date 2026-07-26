@@ -6,7 +6,7 @@ const DEFAULT_LATITUDE = 30.3027;
 const DEFAULT_LONGITUDE = -93.1907;
 const DEFAULT_MAP_ZOOM = 9;
 
-const FOLLOW_SPEED_MPH = 5;
+const FOLLOW_SPEED_MPH = 8;
 const DRIVING_MAP_ZOOM = 14;
 
 const RADAR_OPACITY = 0.6;
@@ -25,7 +25,7 @@ let currentLongitude = null;
 let currentHeading = null;
 let currentSpeedMph = 0;
 
-let drivingModeActivate = false;
+let drivingModeActive = false;
 
 let radarMap;
 let locationMarker;
@@ -169,19 +169,19 @@ function updateNavigationDisplay() {
     }
 
     const isDriving =
-        currentSpeedMph >= 8 &&
+        currentSpeedMph >= FOLLOW_SPEED_MPH &&
         currentHeading !== null;
 
     if (isDriving) {
         drivingModeActive = true;
 
-        radarMap.setView(
-            [currentLatitude, currentLongitude],
-            15,
-            {
-                animate: true
-            }
-        );
+    radarMap.setView(
+        [currentLatitude, currentLongitude],
+        DRIVING_MAP_ZOOM,
+        {
+            animate: true
+        }
+    );
 
     } else {
         drivingModeActive = false;
@@ -460,7 +460,7 @@ function degreesToRadians(degrees) {
 // Radar Functions
 // ================================
 
-function initializeRadarMap() {
+function initializeMap() {
     const radarStatus = document.getElementById("radar-status");
 
     const defaultLatitude = DEFAULT_LATITUDE;
@@ -1208,7 +1208,7 @@ updateAlertsPanel();
 
 requestWeatherLocation();
 
-initializeRadarMap();
+initializeMap();
 
 initializeWeatherRadar();
 
