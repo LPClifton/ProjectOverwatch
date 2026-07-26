@@ -84,35 +84,56 @@ const notificationManager = {
 
     clear() {
         this.alerts = [];
+        updateAlertsPanel();
     },
 
-    beginRefresh() {
+    beginRefresh(source) {
         this.alerts.forEach(alert => {
-            alert._syncSeen = false;
+            if (alert.source === source) {
+                alert._syncSeen = false;
+            }
         });
     },
 
-    endRefresh() {
-        this.alerts = this.alerts.filter(alert => alert._syncSeen);
-    },
+    endRefresh(source) {
+        this.alerts = this.alerts.filter(alert => {
+            return (
+                alert.source !== source ||
+                alert._syncSeen
+            );
+        });
+
+    updateAlertsPanel();
+},
     
     addAlert(alert) {
         const existingAlert = this.alerts.find(
-            a => a.id === alert.id
+            existing => existing.id === alert.id
         );
 
         if (existingAlert) {
-
             Object.assign(existingAlert, alert);
             existingAlert._syncSeen = true;
         } else {
-
             alert._syncSeen = true;
             this.alerts.push(alert);
 
+            console.log(
+                "🚨 New Alert:",
+                alert.title || alert.event
+            );
+
+            flashSystemAccent(
+                alert.color || getAlertColor(
+                    alert.priority ||
+                    alert.severity ||
+                    "low"
+                )
+            );
         }
 
-    },    
+        updateAlertsPanel();
+    },  
 
     getAlerts() {
         return this.alerts;
@@ -130,6 +151,151 @@ function flashSystemAccent(alertColor) {
             DEFAULT_SYSTEM_ACCENT
         );
     }, ALERT_FLASH_DURATION);
+}
+
+function getAlertColor(priority) {
+    const alertColors = {
+        critical: "#ff3030",
+        high: "#ff9800",
+        medium: "#ffd400",
+        low: DEFAULT_SYSTEM_ACCENT
+    };
+
+    return (
+        alertColors[priority] ||
+        DEFAULT_SYSTEM_ACCENT
+    );
+}
+
+function updateAlertsPanel() {
+    
+    const alertsHeading =
+        document.getElementById("alerts-heading");
+
+    const alertsPanel =
+        document.getElementById("alerts-panel");
+
+    const alertsStatus =
+        document.getElementById("alerts-status");
+
+    if (!alertsPanel || 
+        !alertsHeading ||
+        !alertsStatus
+    ) {
+        return;
+    }
+
+    const alerts =
+        notificationManager.getAlerts();
+
+    alertsPanel.classList.remove(
+        "alert-clear",
+        "alert-medium",
+        "alert-high",
+        "alert-critical"
+    );
+
+    alertsHeading.classList.remove(
+        "alert-clear",
+        "alert-medium",
+        "alert-high",
+        "alert-critical"
+    );
+
+    alertsStatus.classList.remove(
+        "alert-clear",
+        "alert-medium",
+        "alert-high",
+        "alert-critical"
+    );
+
+    if (alerts.length === 0) {
+        alertsPanel.classList.add("alert-clear");
+        alertsHeading.classList.add("alert-clear");
+        alertsStatus.classList.add("alert-clear");
+
+        alertsStatus.textContent = "🟢 All Clear";
+        return;
+    }
+
+    const priorityOrder = {
+        critical: 4,
+        high: 3,
+        medium: 2,
+        low: 1
+    };
+
+    const highestAlert = [...alerts].sort(
+        function (alertA, alertB) {
+            const priorityA =
+                alertA.priority ||
+                alertA.severity ||
+                "low";
+
+            const priorityB =
+                alertB.priority ||
+                alertB.severity ||
+                "low";
+
+            return (
+                priorityOrder[priorityB] -
+                priorityOrder[priorityA]
+            );
+        }
+    )[0];
+
+    const alertPriority =
+        highestAlert.priority ||
+        highestAlert.severity ||
+        "low";
+
+    switch (alertPriority) {
+        case "critical":
+            alertsPanel.classList.add("alert-critical");
+            alertsHeading.classList.add("alert-critical");
+            alertsStatus.classList.add("alert-critical");
+            break;
+
+        case "high":
+            alertsPanel.classList.add("alert-high");
+            alertsHeading.classList.add("alert-high");
+            alertsStatus.classList.add("alert-high");
+            break;
+
+        case "medium":
+            alertsPanel.classList.add("alert-medium");
+            alertsHeading.classList.add("alert-medium");
+            alertsStatus.classList.add("alert-medium");
+            break;
+
+        default:
+            alertsPanel.classList.add("alert-clear");
+            alertsHeading.classList.add("alert-clear");
+            alertsStatus.classList.add("alert-clear");
+    }
+
+    const alertIcon =
+        highestAlert.icon || "🚨";
+
+    const alertTitle =
+        highestAlert.title ||
+        highestAlert.event ||
+        "Active Alert";
+
+    let alertDetails = "";
+
+    if (typeof highestAlert.distance === "number") {
+        alertDetails +=
+            ` — ${highestAlert.distance.toFixed(1)} miles`;
+    }
+
+    if (highestAlert.direction) {
+        alertDetails +=
+            ` ${highestAlert.direction}`;
+    }
+
+    alertsStatus.textContent =
+        `${alertIcon} ${alertTitle}${alertDetails}`;
 }
 
 // =============================
@@ -839,75 +1005,7 @@ function initializeRadarControls() {
         playButton.textContent = "▶";
     });
 }
-
-
-// =====================================
-// Alerts
-// =====================================
-
-const alertsPanel =
-    document.getElementById("alerts-panel");
-
-alertsPanel.classList.remove(
-    "alert-clear",
-    "alert-medium",
-    "alert-high",
-    "alert-critical"
-);
-
-function updateAlertsPanel() {
-    const alertsStatus =
-        document.getElementById("alerts-status");
-
-    const alerts =
-        notificationManager.getAlerts();
-
-    if (alerts.length === 0) {
-        alertsStatus.textContent = "🟢 All Clear";
-
-        alertsPanel.classList.add("alert-clear");
-        return;
-    }
-
-    const priorityOrder = {
-        critical: 4,
-        high: 3, 
-        medium: 2,
-        low: 1
-    };
-
-    alerts.sort(function (alertA, alertB) {
-        return (
-            priorityOrder[alertB.priority] -
-            priorityOrder[alertA.priority]
-        );
-    });
-
-    const highestAlert = alerts[0];
-
-    switch (highestAlert.priority) {
-
-        case "critical":
-            alertsPanel.classList.add("alert-critical");
-            break;
-
-        case "high":
-            alertsPanel.classList.add("alert-high");
-            break;
-
-        case "medium":
-            alertsPanel.classList.add("alert-medium");
-             break;
-
-        default:
-            alertsPanel.classList.add("alert-clear");
-    }  
-
-    alertsStatus.textContent =
-        `${highestAlert.icon} ${highestAlert.title} — ` +
-        `${highestAlert.distance.toFixed(1)} miles ${highestAlert.direction}`;
-
-}        
+       
 
 // ====================================
 // Lightning Functions
@@ -1283,7 +1381,13 @@ initializeRadarControls();
 
 initializeLightning();
 
-
+notificationManager.addAlert({
+    id: "housekeeping-test",
+    source: "TEST",
+    title: "Housekeeping Test Alert",
+    priority: "medium",
+    icon: "🚨"
+});
 
 
 

@@ -452,6 +452,53 @@ body.map-open {
     box-shadow: 0 0 20px rgba(255,48,48,0.60);
 }
 
+#alerts-status.alert-clear {
+    color: var(--system-accent);
+}
+
+#alerts-status.alert-medium {
+    color: #ffd400;
+}
+
+#alerts-status.alert-high {
+    color: #ff9800;
+}
+
+#alerts-status.alert-critical {
+    color: #ff3030;
+}
+
+#alerts-panel #alerts-status.alert-clear {
+    color: var(--system-accent);
+}
+
+#alerts-panel #alerts-status.alert-medium {
+    color: #ffd400;
+}
+
+#alerts-panel #alerts-status.alert-high {
+    color: #ff9800;
+}
+
+#alerts-panel #alerts-status.alert-critical {
+    color: #ff3030;
+}
+
+#alerts-heading.alert-clear {
+    color: var(--system-accent);
+}
+
+#alerts-heading.alert-medium {
+    color: #ffd400;
+}
+
+#alerts-heading.alert-high {
+    color: #ff9800;
+}
+
+#alerts-heading.alert-critical {
+    color: #ff3030;
+}
 /* ================================
    System-Wide Alert Flash
 ================================ */
