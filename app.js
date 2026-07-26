@@ -2,6 +2,17 @@
 // Constants
 // =============================
 
+const APP_PROFILES = {
+    VEHICLE: "VEHICLE",
+    MOBILE: "MOBILE"
+}
+
+const OPERATING_MODES = {
+    PARKED: "PARKED",
+    WALKING: "WALKING",
+    DRIVING: "DRIVING"
+};
+
 const DEFAULT_LATITUDE = 30.3027;
 const DEFAULT_LONGITUDE = -93.1907;
 const DEFAULT_MAP_ZOOM = 9;
@@ -12,6 +23,9 @@ const DRIVING_MAP_ZOOM = 14;
 const RADAR_OPACITY = 0.6;
 const RADAR_FRAME_DELAY = 900;
 const RADAR_END_PAUSE = 2000;
+const RADAR_FADE_DURATION = 350
+const RADAR_LAYER_CLEANUP_DELAY = 450;
+
 
 const SENTINEL_RADIUS_MILES = 1000;
 
@@ -23,17 +37,23 @@ const ALERT_FLASH_DURATION = 3000;
 // Global Variables
 // =============================
 
+let appProfile = APP_PROFILES.VEHICLE;
+let operatingMode = OPERATING_MODES.PARKED;
+
 let currentLatitude = null;
 let currentLongitude = null;
 let currentHeading = null;
 let currentSpeedMph = 0;
 
 let drivingModeActive = false;
+let notificationSystemInitialized = false;
+let initializedAlertSources = new Set();
 
 let radarMap;
 let locationMarker;
 let accuracyCircle;
 let weatherRadar;
+let previousWeatherRadar;
 let lightningLayer;
 let warningsLayer;
 let layerControl;
@@ -41,14 +61,52 @@ let radarFrames = [];
 let currentRadarFrame = 0;
 let radarAnimationTimer = null;
 let radarIsPlaying = true;
-
-
-
+let systemAccentFlashTimer = null;
 
 let warningsRefreshTimer;
 
 let tempestSocket;
 let tempestReconnectTimer;
+
+/// =============================
+// Operating Mode Manager
+// =============================
+
+function determineOperatingMode() {
+    if (currentSpeedMph >= FOLLOW_SPEED_MPH) {
+        return OPERATING_MODES.DRIVING;
+    }
+
+    if (
+        appProfile === APP_PROFILES.MOBILE &&
+        currentSpeedMph >= 2
+    ) {
+        return OPERATING_MODES.WALKING;
+    }
+
+    return OPERATING_MODES.PARKED;
+}
+
+function updateOperatingMode() {
+    const newOperatingMode =
+        determineOperatingMode();
+
+    if (newOperatingMode === operatingMode) {
+        return;
+    }
+
+    operatingMode = newOperatingMode;
+
+    console.log(
+        "Operating mode changed:",
+        operatingMode
+    );
+
+    updateMovementIcon();
+    updateNavigationDisplay();
+    updateSystemStatus();
+}
+
 
 // =============================
 // Utility Functions
@@ -252,8 +310,26 @@ const notificationManager = {
             );
         });
 
-    updateAlertsPanel();
-},
+        updateAlertsPanel();
+
+        initializedAlertSources.add(source);
+    },  
+
+    getAlertColor(priority) {
+        switch (priority) {
+            case "critical":
+                return "#ff3030";
+
+            case "high":
+                return "#ff9800";
+
+            case "medium":
+                return "#ffd400";
+
+            default:
+                return DEFAULT_SYSTEM_ACCENT;
+        }
+    },
     
     addAlert(alert) {
         const existingAlert = this.alerts.find(
@@ -272,14 +348,15 @@ const notificationManager = {
                 alert.title || alert.event
             );
 
-            flashSystemAccent(
-                alert.color || getAlertColor(
-                    alert.priority ||
-                    alert.severity ||
-                    "low"
-                )
-            );
+            if (initializedAlertSources.has(alert.source)) {
+            const alertColor =
+                this.getAlertColor(alert.priority);
+
+            flashSystemAccent(alertColor);
         }
+    }
+
+        
 
         updateAlertsPanel();
     },  
@@ -289,16 +366,30 @@ const notificationManager = {
     }
 };
 
+let alertFlashTimer = null;
+
+
 function flashSystemAccent(alertColor) {
+    console.log("FRAME FLASH:", alertColor);
+
     const root = document.documentElement;
 
-    root.style.setProperty("--system-accent", alertColor);
+    root.style.setProperty(
+        "--system-accent",
+        alertColor
+    );
 
-    setTimeout(() => {
+    if (systemAccentFlashTimer) {
+        clearTimeout(systemAccentFlashTimer);
+    }
+
+    systemAccentFlashTimer = setTimeout(() => {
         root.style.setProperty(
             "--system-accent",
             DEFAULT_SYSTEM_ACCENT
         );
+
+        systemAccentFlashTimer = null;
     }, ALERT_FLASH_DURATION);
 }
 
@@ -459,12 +550,14 @@ function updateMovementIcon() {
 
     let newIcon;
 
-    if (currentSpeedMph < 2) {
-        newIcon = stationaryLocationIcon;
-    } else if (currentSpeedMph < 8) {
+    if (operatingMode === OPERATING_MODES.DRIVING) {
+        newIcon = vehicleLocationIcon;
+    } else if (
+        operatingMode === OPERATING_MODES.WALKING
+    ) {
         newIcon = walkingLocationIcon;
     } else {
-        newIcon = vehicleLocationIcon;
+        newIcon = stationaryLocationIcon;
     }
 
     if (locationMarker.options.icon !== newIcon) {
@@ -498,26 +591,19 @@ function updateNavigationDisplay() {
         return;
     }
 
-    const isDriving =
-        currentSpeedMph >= FOLLOW_SPEED_MPH &&
-        currentHeading !== null;
-
-    if (isDriving) {
-        drivingModeActive = true;
-
-    radarMap.setView(
-        [currentLatitude, currentLongitude],
-        DRIVING_MAP_ZOOM,
-        {
-            animate: true
-        }
-    );
-
-    } else {
-        drivingModeActive = false;
+    if (
+        operatingMode === OPERATING_MODES.DRIVING &&
+        currentHeading !== null
+    ) {
+        radarMap.setView(
+            [currentLatitude, currentLongitude],
+            DRIVING_MAP_ZOOM,
+            {
+                animate: true
+            }
+        );
     }
 }
-
 
 // =============================
 // Clock Functions
@@ -785,6 +871,8 @@ function initializeMap() {
                     locationMarker.setLatLng([latitude, longitude]);
                 }
 
+                updateOperatingMode();
+
                 updateMovementIcon();
                 updateNavigationDisplay();
                 updateSystemStatus();
@@ -870,34 +958,93 @@ async function initializeWeatherRadar() {
 }
 
 function displayRadarFrame(frameIndex) {
+    if (
+        !radarMap ||
+        radarFrames.length === 0 ||
+        !radarFrames[frameIndex]
+    ) {
+        return;
+    }
+
     const frame = radarFrames[frameIndex];
 
-    if (!frame) {
-        return;
+    const radarTileUrl =
+        "https://tilecache.rainviewer.com" +
+        frame.path +
+        "/256/{z}/{x}/{y}/2/1_1.png";
 
-    }
-
-    updateRadarTimestamp (frame)
-
-    const radarTileUrl = 
-    "https://tilecache.rainviewer.com" +
-    frame.path +
-    "/256/{z}/{x}/{y}/2/1_1.png";
-
-    if (weatherRadar) {
-        radarMap.removeLayer(weatherRadar);
-
-    }
-
-    weatherRadar = L.tileLayer(radarTileUrl, {
+    const newRadarLayer = L.tileLayer(radarTileUrl, {
         tileSize: 256,
-        opacity: RADAR_OPACITY,
+        opacity: 0,
         maxNativeZoom: 7,
         maxZoom: 19,
         attribution: "RainViewer"
     });
 
-    weatherRadar.addTo(radarMap);
+    newRadarLayer.addTo(radarMap);
+
+    newRadarLayer.on("load", () => {
+        previousWeatherRadar = weatherRadar;
+        weatherRadar = newRadarLayer;
+
+        fadeInRadarLayer(weatherRadar);
+
+        if (previousWeatherRadar) {
+            fadeOutRadarLayer(previousWeatherRadar);
+        }
+    });
+
+    updateRadarTimestamp(frame);
+
+    console.log(
+        `Displaying radar frame: ${frameIndex + 1}`
+    );
+}
+
+function fadeInRadarLayer(layer) {
+    let opacity = 0;
+
+    const fadeStep = 50;
+    const opacityStep =
+        RADAR_OPACITY /
+        (RADAR_FADE_DURATION / fadeStep);
+
+    const fadeTimer = setInterval(() => {
+        opacity += opacityStep;
+
+        if (opacity >= RADAR_OPACITY) {
+            opacity = RADAR_OPACITY;
+            clearInterval(fadeTimer);
+        }
+
+        layer.setOpacity(opacity);
+    }, fadeStep);
+}
+
+function fadeOutRadarLayer(layer) {
+    let opacity = RADAR_OPACITY;
+
+    const fadeStep = 50;
+    const opacityStep =
+        RADAR_OPACITY /
+        (RADAR_FADE_DURATION / fadeStep);
+
+    const fadeTimer = setInterval(() => {
+        opacity -= opacityStep;
+
+        if (opacity <= 0) {
+            opacity = 0;
+            clearInterval(fadeTimer);
+        }
+
+        layer.setOpacity(opacity);
+    }, fadeStep);
+
+    setTimeout(() => {
+        if (radarMap.hasLayer(layer)) {
+            radarMap.removeLayer(layer);
+        }
+    }, RADAR_LAYER_CLEANUP_DELAY);
 }
 
 function startRadarAnimation() {
@@ -1096,8 +1243,7 @@ async function loadNwsWarnings () {
     }
 
     const warningsUrl =
-    "https://api.weather.gov/alerts/active?point=" +
-    `${currentLatitude},${currentLongitude}`;
+        "https://api.weather.gov/alerts/active";
 
         console.log("NWS warning URL:", warningsUrl);
 
@@ -1391,16 +1537,30 @@ initializeRadarControls();
 
 initializeLightning();
 
-/*notificationManager.addAlert({
+// ==================================
+// Developer Tests
+// ==================================
+
+/*
+notificationManager.addAlert({
     id: "housekeeping-test",
     source: "TEST",
     title: "Housekeeping Test Alert",
     priority: "medium",
     icon: "🚨"
 });
+
+
+currentSpeedMph = 3;
+updateOperatingMode();
+
+console.log({
+    appProfile,
+    operatingMode
+});
+
+setTimeout(function () {
+    flashSystemAccent("#ff3030");
+}, 2000);
+
 */
-
-
-
-
-
