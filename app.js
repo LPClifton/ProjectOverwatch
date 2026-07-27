@@ -543,7 +543,6 @@ function updateAlertsPanel() {
 // =============================
 
 function updateMovementIcon() {
-
     if (!locationMarker) {
         return;
     }
@@ -564,21 +563,21 @@ function updateMovementIcon() {
         locationMarker.setIcon(newIcon);
     }
 
-    const markerElement = locationMarker.getElement();
+    const markerElement =
+        locationMarker.getElement();
 
     if (!markerElement) {
         return;
     }
 
     const vehicleMarker =
-        markerElement.querySelector(".vehicle-marker");
+        markerElement.querySelector(
+            ".vehicle-marker"
+        );
 
-    if (
-        vehicleMarker &&
-        currentHeading !== null
-    ) {
+    if (vehicleMarker) {
         vehicleMarker.style.transform =
-            `rotate(${currentHeading}deg)`;
+            "rotate(0deg)";
     }
 }
 
@@ -602,6 +601,18 @@ function updateNavigationDisplay() {
                 animate: true
             }
         );
+
+        if (
+            typeof radarMap.setBearing === "function"
+        ) {
+            radarMap.setBearing(currentHeading);
+        } else {
+            console.warn(
+                "Map rotation is unavailable."
+            );
+        }
+
+        
     }
 }
 
