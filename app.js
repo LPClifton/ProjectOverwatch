@@ -1,3 +1,5 @@
+
+
 // =============================
 // Constants
 // =============================
@@ -433,6 +435,70 @@ const walkingLocationIcon = L.divIcon({
     iconSize: [28, 28],
     iconAnchor: [14, 14]
 });
+
+// =============================
+// Diagnostics Logger
+// =============================
+
+const diagnosticLogEntries = [];
+const MAX_DIAGNOSTIC_LOG_ENTRIES = 5000;
+
+function diagnosticLog(category, data = {}) {
+    const entry = {
+        timestamp: new Date().toISOString(),
+        category,
+        data
+    };
+
+    diagnosticLogEntries.push(entry);
+
+    if (
+        diagnosticLogEntries.length >
+        MAX_DIAGNOSTIC_LOG_ENTRIES
+    ) {
+        diagnosticLogEntries.shift();
+    }
+
+    console.log(`[${category}]`, data);
+}
+
+function exportDiagnosticLog() {
+    diagnosticLog("Diagnostics", {
+        event: "Log exported",
+        entryCount: diagnosticLogEntries.length
+    });
+
+    const logData = {
+        exportedAt: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        entries: diagnosticLogEntries
+    };
+
+    const blob = new Blob(
+        [JSON.stringify(logData, null, 2)],
+        { type: "application/json" }
+    );
+
+    const url = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
+
+    const timestamp = new Date()
+        .toISOString()
+        .replaceAll(":", "-")
+        .replaceAll(".", "-");
+
+    downloadLink.href = url;
+    downloadLink.download =
+        `overwatch-diagnostics-${timestamp}.json`;
+
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+
+    setTimeout(() => {
+        URL.revokeObjectURL(url);
+    }, 1000);
+}
 
 // =============================
 // Notification Manager
@@ -1090,6 +1156,51 @@ function initializeMap() {
                 updateMovementIcon();
                 updateNavigationDisplay();
                 updateSystemStatus();
+
+                diagnosticLog("Navigation", {
+                    latitude: currentLatitude,
+                    longitude: currentLongitude,
+
+                accuracyFeet:
+                     position.coords.accuracy * 3.28084,
+
+                rawSpeedMps:
+                    position.coords.speed,
+
+                currentSpeedMph,
+
+                averageSpeedMph:
+                    navigationIntelligenceManager
+                        .averageSpeedMph,
+
+                rawHeading:
+                    position.coords.heading,
+
+                smoothedHeading:
+                    navigationIntelligenceManager
+                        .smoothedHeading,
+
+                currentHeading,
+
+                mapBearing:
+                    radarMap?.getBearing?.() ?? null,
+
+                actualZoom:
+                    radarMap?.getZoom?.() ?? null,
+
+                targetZoom:
+                    navigationIntelligenceManager
+                        .targetZoom,
+
+                operatingMode:
+                    navigationIntelligenceManager.mode,
+
+                radarPlaying:
+                    radarIsPlaying,
+
+                radarPaused:
+                    radarAnimationPaused
+            });
 
                 const accuracy = position.coords.accuracy;
 
@@ -1750,6 +1861,16 @@ initializeWeatherRadar();
 initializeRadarControls();
 
 initializeLightning();
+
+const exportDiagnosticsButton =
+    document.getElementById(
+        "export-diagnostics-btn"
+    );
+
+exportDiagnosticsButton?.addEventListener(
+    "click",
+    exportDiagnosticLog
+);
 
 // navigationIntelligenceManager.update();
 
