@@ -15,10 +15,14 @@ const OPERATING_MODES = {
 
 const DEFAULT_LATITUDE = 30.3027;
 const DEFAULT_LONGITUDE = -93.1907;
-const DEFAULT_MAP_ZOOM = 9;
+const DEFAULT_MAP_ZOOM = 9
+const HEADING_SAMPLE_WINDOW_MS = 5000;
+const MIN_HEADING_SPEED_MPH = 3;
 
 const FOLLOW_SPEED_MPH = 8;
 const SPEED_AVERAGE_DURATION_MS = 30 * 1000
+
+const MAP_LOOK_AHEAD_RATIO = 0.22;
 
 const RADAR_OPACITY = 0.6;
 const RADAR_FRAME_DELAY = 900;
@@ -44,9 +48,6 @@ let currentLatitude = null;
 let currentLongitude = null;
 let currentHeading = null;
 let currentSpeedMph = 0;
-let speedSamples = [];
-let averageSpeedMph = 0;
-let currentDrivingZoom = null;
 
 let drivingModeActive = false;
 let notificationSystemInitialized = false;
@@ -260,34 +261,6 @@ function degreesToRadians(degrees) {
     return degrees * (Math.PI / 180);
 }
 
-function updateAverageSpeed(speedMph) {
-    const now = Date.now();
-
-    speedSamples.push({
-        speed: speedMph,
-        timestamp: now
-    });
-
-    const cutoffTime =
-        now - SPEED_AVERAGE_DURATION_MS;
-
-    speedSamples = speedSamples.filter(
-        sample => sample.timestamp >= cutoffTime
-    );
-
-    const totalSpeed = speedSamples.reduce(
-        (sum, sample) => sum + sample.speed,
-        0
-    );
-
-    averageSpeedMph =
-        speedSamples.length > 0
-            ? totalSpeed / speedSamples.length
-            : speedMph;
-
-    return averageSpeedMph;
-}
-
 function getDrivingZoom(speedMph) {
     if (speedMph < 15) {
         return 17;
@@ -317,39 +290,124 @@ const navigationIntelligenceManager = {
     averageSpeedMph: 0,
     targetZoom: DEFAULT_MAP_ZOOM,
     speedSamples: [],
-    sampleWindowMs: 30 * 1000,
+    sampleWindowMs: SPEED_AVERAGE_DURATION_MS,
+    headingSamples: [],
+    headingSampleWindowMs: HEADING_SAMPLE_WINDOW_MS,
+    smoothedHeading: null,
 
-    update(currentSpeedMph) {
+    update(speedMph) {
+        if (speedMph == null) {
+            return;
+        }
 
-    if (currentSpeedMph == null) {
-        return;
+        const now = Date.now();
+
+        this.speedSamples.push({
+            speed: speedMph,
+            timestamp: now
+        });
+
+        this.speedSamples =
+            this.speedSamples.filter(sample => {
+                return (
+                    now - sample.timestamp <=
+                    this.sampleWindowMs
+                );
+            });
+
+        const totalSpeed =
+            this.speedSamples.reduce(
+                (sum, sample) => {
+                    return sum + sample.speed;
+                },
+                0
+            );
+
+        this.averageSpeedMph =
+            this.speedSamples.length > 0
+                ? totalSpeed /
+                  this.speedSamples.length
+                : speedMph;
+
+        this.targetZoom =
+            getDrivingZoom(
+                this.averageSpeedMph
+            );
+
+        this.mode = determineOperatingMode();
+
+        console.log("[Navigation]", {
+            currentSpeedMph:
+                Number(speedMph.toFixed(1)),
+
+            averageSpeedMph:
+                Number(
+                    this.averageSpeedMph.toFixed(1)
+                ),
+
+            targetZoom:
+                this.targetZoom,
+
+            sampleCount:
+                this.speedSamples.length,
+
+            mode:
+                this.mode
+        });
+    },
+
+updateHeading(rawHeading, speedMph) {
+    if (
+        rawHeading == null ||
+        speedMph < MIN_HEADING_SPEED_MPH
+    ) {
+        return this.smoothedHeading;
     }
 
     const now = Date.now();
 
-    this.speedSamples.push({
-        speed: currentSpeedMph,
+    this.headingSamples.push({
+        heading: rawHeading,
         timestamp: now
     });
 
-    this.speedSamples = this.speedSamples.filter(sample =>
-        now - sample.timestamp <= this.sampleWindowMs
-    );
+    this.headingSamples =
+        this.headingSamples.filter(sample => {
+            return (
+                now - sample.timestamp <=
+                this.headingSampleWindowMs
+            );
+        });
 
-    const totalSpeed = this.speedSamples.reduce(
-        (sum, sample) => sum + sample.speed,
-        0
-    );
+    let sineTotal = 0;
+    let cosineTotal = 0;
 
-    this.averageSpeedMph =
-        totalSpeed / this.speedSamples.length;
+    this.headingSamples.forEach(sample => {
+        const radians =
+            sample.heading * Math.PI / 180;
 
-    console.log(
-        `Average Speed: ${this.averageSpeedMph.toFixed(1)} mph`
-    );
+        sineTotal += Math.sin(radians);
+        cosineTotal += Math.cos(radians);
+    });
+
+    const averageRadians =
+        Math.atan2(
+            sineTotal / this.headingSamples.length,
+            cosineTotal / this.headingSamples.length
+        );
+
+    let averageDegrees =
+        averageRadians * 180 / Math.PI;
+
+    if (averageDegrees < 0) {
+        averageDegrees += 360;
+    }
+
+    this.smoothedHeading = averageDegrees;
+
+    return this.smoothedHeading;
 }
-
-};
+}
 
 // =============================
 // Map Marker Icons
@@ -675,6 +733,38 @@ function updateMovementIcon() {
     }
 }
 
+function applyMapLookAhead() {
+    if (
+        !radarMap ||
+        operatingMode !==
+            OPERATING_MODES.DRIVING
+    ) {
+        return;
+    }
+
+    const mapContainer =
+        radarMap.getContainer();
+
+    const lookAheadPixels =
+        mapContainer.clientHeight *
+        MAP_LOOK_AHEAD_RATIO;
+
+    /*
+     * The map is rotated so the vehicle heading
+     * points toward the top of the display.
+     *
+     * Panning upward moves the map center ahead
+     * of the vehicle, leaving the vehicle marker
+     * below center.
+     */
+    radarMap.panBy(
+        [0, -lookAheadPixels],
+        {
+            animate: false
+        }
+    );
+}
+
 function updateNavigationDisplay() {
     if (
         !radarMap ||
@@ -685,59 +775,41 @@ function updateNavigationDisplay() {
     }
 
     if (
-        operatingMode === OPERATING_MODES.DRIVING &&
-        currentHeading !== null
+        operatingMode !==
+        OPERATING_MODES.DRIVING
     ) {
-        const drivingZoom =
-            getDrivingZoom(averageSpeedMph);
+        return;
+    }
 
-        radarMap.setView(
-            [currentLatitude, currentLongitude],
-            drivingZoom,
-            {
-                animate: true
-            }
+    const drivingZoom =
+        navigationIntelligenceManager
+            .targetZoom;
+
+    if (
+        currentHeading !== null &&
+        typeof radarMap.setBearing ===
+            "function"
+    ) {
+        radarMap.setBearing(
+            currentHeading
         );
+    }
 
-        if (
-            typeof radarMap.setBearing === "function"
-        ) {
-            radarMap.setBearing(currentHeading);
-        } else {
-            console.warn(
-                "Map rotation is unavailable."
-            );
+    radarMap.setView(
+        [
+            currentLatitude,
+            currentLongitude
+        ],
+        drivingZoom,
+        {
+            animate: false
         }
+    );
 
-        
+    if (currentHeading !== null) {
+        applyMapLookAhead();
     }
 }
-
-function getDrivingZoom(speedMph) {
-    if (speedMph < 15) {
-        return 17;
-    }
-
-    if (speedMph < 30) {
-        return 16;
-    }
-
-    if (speedMph < 50) {
-        return 15;
-    }
-
-    if (speedMph < 70) {
-        return 14;
-    }
-
-    return 13;
-}
-
-console.log({
-    currentSpeedMph,
-    averageSpeedMph,
-    currentDrivingZoom
-});
 
 
 // =============================
@@ -977,18 +1049,21 @@ function initializeMap() {
                     currentSpeedMph = 0;
                 }
 
-                navigationIntelligenceManager.update(currentSpeedMph);
-
-                updateAverageSpeed(currentSpeedMph);
+                navigationIntelligenceManager.update(
+                    currentSpeedMph
+                );
 
                 if (position.coords.heading !== null) {
-                    currentHeading = position.coords.heading;
-                }
+                    const smoothedHeading =
+                        navigationIntelligenceManager.updateHeading(
+                            position.coords.heading,
+                            currentSpeedMph
+                        );
 
-                console.log(
-                    "Heading:",
-                    currentHeading
-                );     
+                    if (smoothedHeading !== null) {
+                        currentHeading = smoothedHeading;
+                    }
+                }
 
                 if (!warningsRefreshTimer) {
                     initializeWarnings();
