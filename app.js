@@ -18,7 +18,7 @@ const DEFAULT_LONGITUDE = -93.1907;
 const DEFAULT_MAP_ZOOM = 9;
 
 const FOLLOW_SPEED_MPH = 8;
-const DRIVING_MAP_ZOOM = 14;
+const SPEED_AVERAGE_DURATION_MS = 30 * 1000
 
 const RADAR_OPACITY = 0.6;
 const RADAR_FRAME_DELAY = 900;
@@ -44,6 +44,9 @@ let currentLatitude = null;
 let currentLongitude = null;
 let currentHeading = null;
 let currentSpeedMph = 0;
+let speedSamples = [];
+let averageSpeedMph = 0;
+let currentDrivingZoom = null;
 
 let drivingModeActive = false;
 let notificationSystemInitialized = false;
@@ -256,6 +259,97 @@ function bearingToCompass(bearing) {
 function degreesToRadians(degrees) {
     return degrees * (Math.PI / 180);
 }
+
+function updateAverageSpeed(speedMph) {
+    const now = Date.now();
+
+    speedSamples.push({
+        speed: speedMph,
+        timestamp: now
+    });
+
+    const cutoffTime =
+        now - SPEED_AVERAGE_DURATION_MS;
+
+    speedSamples = speedSamples.filter(
+        sample => sample.timestamp >= cutoffTime
+    );
+
+    const totalSpeed = speedSamples.reduce(
+        (sum, sample) => sum + sample.speed,
+        0
+    );
+
+    averageSpeedMph =
+        speedSamples.length > 0
+            ? totalSpeed / speedSamples.length
+            : speedMph;
+
+    return averageSpeedMph;
+}
+
+function getDrivingZoom(speedMph) {
+    if (speedMph < 15) {
+        return 17;
+    }
+
+    if (speedMph < 30) {
+        return 16;
+    }
+
+    if (speedMph < 50) {
+        return 15;
+    }
+
+    if (speedMph < 70) {
+        return 14;
+    }
+
+    return 13;
+}
+
+// =============================
+// Navigation Intelligence Manager
+// =============================
+
+const navigationIntelligenceManager = {
+    mode: "UNKNOWN",
+    averageSpeedMph: 0,
+    targetZoom: DEFAULT_MAP_ZOOM,
+    speedSamples: [],
+    sampleWindowMs: 30 * 1000,
+
+    update(currentSpeedMph) {
+
+    if (currentSpeedMph == null) {
+        return;
+    }
+
+    const now = Date.now();
+
+    this.speedSamples.push({
+        speed: currentSpeedMph,
+        timestamp: now
+    });
+
+    this.speedSamples = this.speedSamples.filter(sample =>
+        now - sample.timestamp <= this.sampleWindowMs
+    );
+
+    const totalSpeed = this.speedSamples.reduce(
+        (sum, sample) => sum + sample.speed,
+        0
+    );
+
+    this.averageSpeedMph =
+        totalSpeed / this.speedSamples.length;
+
+    console.log(
+        `Average Speed: ${this.averageSpeedMph.toFixed(1)} mph`
+    );
+}
+
+};
 
 // =============================
 // Map Marker Icons
@@ -594,9 +688,12 @@ function updateNavigationDisplay() {
         operatingMode === OPERATING_MODES.DRIVING &&
         currentHeading !== null
     ) {
+        const drivingZoom =
+            getDrivingZoom(averageSpeedMph);
+
         radarMap.setView(
             [currentLatitude, currentLongitude],
-            DRIVING_MAP_ZOOM,
+            drivingZoom,
             {
                 animate: true
             }
@@ -615,6 +712,33 @@ function updateNavigationDisplay() {
         
     }
 }
+
+function getDrivingZoom(speedMph) {
+    if (speedMph < 15) {
+        return 17;
+    }
+
+    if (speedMph < 30) {
+        return 16;
+    }
+
+    if (speedMph < 50) {
+        return 15;
+    }
+
+    if (speedMph < 70) {
+        return 14;
+    }
+
+    return 13;
+}
+
+console.log({
+    currentSpeedMph,
+    averageSpeedMph,
+    currentDrivingZoom
+});
+
 
 // =============================
 // Clock Functions
@@ -852,6 +976,10 @@ function initializeMap() {
                 } else {
                     currentSpeedMph = 0;
                 }
+
+                navigationIntelligenceManager.update(currentSpeedMph);
+
+                updateAverageSpeed(currentSpeedMph);
 
                 if (position.coords.heading !== null) {
                     currentHeading = position.coords.heading;
@@ -1547,6 +1675,8 @@ initializeWeatherRadar();
 initializeRadarControls();
 
 initializeLightning();
+
+// navigationIntelligenceManager.update();
 
 // ==================================
 // Developer Tests
