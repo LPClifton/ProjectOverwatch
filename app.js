@@ -27,10 +27,12 @@ const SPEED_AVERAGE_DURATION_MS = 30 * 1000
 const MAP_LOOK_AHEAD_RATIO = 0.22;
 
 const RADAR_OPACITY = 0.6;
-const RADAR_FRAME_DELAY = 900;
-const RADAR_END_PAUSE = 2000;
+const RADAR_FRAME_DELAY = 2000;
+const RADAR_END_PAUSE = 4000;
 const RADAR_FADE_DURATION = 350
 const RADAR_LAYER_CLEANUP_DELAY = 450;
+const MIN_MAP_ZOOM = 5;
+const MIN_ANIMATED_RADAR_ZOOM = 8;
 
 
 const SENTINEL_RADIUS_MILES = 1000;
@@ -56,6 +58,7 @@ let notificationSystemInitialized = false;
 let initializedAlertSources = new Set();
 
 let radarMap;
+let radarLayerGroup;
 let locationMarker;
 let accuracyCircle;
 let weatherRadar;
@@ -68,8 +71,11 @@ let currentRadarFrame = 0;
 let radarAnimationTimer = null;
 let radarIsPlaying = true;
 let systemAccentFlashTimer = null;
+let radarPausedForZoom = false;
+let radarWasPlayingBeforeZoomPause = false;
 
 let warningsRefreshTimer;
+let initialWarningsLoaded = false;
 
 let tempestSocket;
 let tempestReconnectTimer;
@@ -440,8 +446,39 @@ const walkingLocationIcon = L.divIcon({
 // Diagnostics Logger
 // =============================
 
-const diagnosticLogEntries = [];
+const DIAGNOSTIC_STORAGE_KEY =
+    "overwatch-diagnostic-log";
+
 const MAX_DIAGNOSTIC_LOG_ENTRIES = 5000;
+
+function loadDiagnosticLogEntries() {
+    try {
+        const savedLog =
+            localStorage.getItem(
+                DIAGNOSTIC_STORAGE_KEY
+            );
+
+        if (!savedLog) {
+            return [];
+        }
+
+        const parsedLog = JSON.parse(savedLog);
+
+        return Array.isArray(parsedLog)
+            ? parsedLog
+            : [];
+    } catch (error) {
+        console.error(
+            "Unable to restore diagnostic log:",
+            error
+        );
+
+        return [];
+    }
+}
+
+const diagnosticLogEntries =
+    loadDiagnosticLogEntries();
 
 function diagnosticLog(category, data = {}) {
     const entry = {
@@ -457,6 +494,19 @@ function diagnosticLog(category, data = {}) {
         MAX_DIAGNOSTIC_LOG_ENTRIES
     ) {
         diagnosticLogEntries.shift();
+    }
+
+    try {
+        localStorage.setItem(
+            DIAGNOSTIC_STORAGE_KEY,
+            JSON.stringify(
+                diagnosticLogEntries
+            )
+        );
+    } catch (error) {
+        console.error(
+            "Unable to save diagnostic log:"
+        );
     }
 
     console.log(`[${category}]`, data);
@@ -1042,6 +1092,32 @@ function requestWeatherLocation() {
 // Radar Functions
 // ================================
 
+function updateMapZoomDisplay() {
+    const zoomDisplay =
+        document.getElementById(
+            "map-zoom-level"
+        );
+
+    if (!zoomDisplay || !radarMap) {
+        return;
+    }
+
+    const currentZoom =
+        radarMap.getZoom();
+
+    zoomDisplay.textContent =
+        `Z${currentZoom}`;
+
+    diagnosticLog("Map", {
+        event: "Zoom changed",
+        zoom: currentZoom,
+        fullscreen:
+            mapPanel.classList.contains(
+                "fullscreen-map"
+            )
+    });
+}
+
 function initializeMap() {
     const mapStatus = document.getElementById("map-status");
 
@@ -1049,11 +1125,31 @@ function initializeMap() {
     const defaultLongitude = DEFAULT_LONGITUDE;
 
     radarMap = L.map("map", {
-        rotate: true
+        rotate: true,
+        minZoom: MIN_MAP_ZOOM
     }).setView(
         [defaultLatitude, defaultLongitude],
         DEFAULT_MAP_ZOOM
     );
+
+    radarMap.on(
+        "zoomend",
+        function () {
+            updateMapZoomDisplay();
+            handleRadarZoomLimit();
+
+            if (
+                radarFrames.length > 0 &&
+                radarMap.getZoom() <= 7
+            ) {
+                displayRadarFrame(
+                    currentRadarFrame
+                );
+            }
+        }
+    );
+
+    updateMapZoomDisplay();
 
     const streetMap = L.tileLayer(
         "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -1077,6 +1173,38 @@ function initializeMap() {
             collapsed: false
         }
     ).addTo(radarMap)
+
+    radarLayerGroup =
+    L.layerGroup().addTo(radarMap);
+
+    layerControl.addOverlay(
+        radarLayerGroup,
+        "🌧️ Weather Radar"
+    );
+
+    radarMap.on("overlayremove", function (event) {
+        if (event.layer !== radarLayerGroup) {
+            return;
+        }
+
+        stopRadarAnimation();
+
+        console.log(
+            "[Radar] Overlay hidden. Animation stopped."
+        );
+    });
+
+    radarMap.on("overlayadd", async function (event) {
+        if (event.layer !== radarLayerGroup) {
+            return;
+        }
+
+        console.log(
+            "[Radar] Overlay restored. Loading fresh frames."
+        );
+
+        await initializeWeatherRadar();
+    });
 
     radarMap.on("click", function (event) {
         console.log("Map clicked:", event.latlng);
@@ -1131,8 +1259,9 @@ function initializeMap() {
                     }
                 }
 
-                if (!warningsRefreshTimer) {
-                    initializeWarnings();
+                if (!initialWarningsLoaded) {
+                    initialWarningsLoaded = true;
+                    loadNwsWarnings();
                 }
 
                 if (!locationMarker) {
@@ -1161,46 +1290,55 @@ function initializeMap() {
                     latitude: currentLatitude,
                     longitude: currentLongitude,
 
-                accuracyFeet:
-                     position.coords.accuracy * 3.28084,
+                    accuracyFeet:
+                        position.coords.accuracy * 3.28084,
 
-                rawSpeedMps:
-                    position.coords.speed,
+                    rawSpeedMps:
+                        position.coords.speed,
 
-                currentSpeedMph,
+                        currentSpeedMph,
 
-                averageSpeedMph:
+                        averageSpeedMph:
                     navigationIntelligenceManager
                         .averageSpeedMph,
 
-                rawHeading:
-                    position.coords.heading,
+                    rawHeading:
+                        position.coords.heading,
 
-                smoothedHeading:
-                    navigationIntelligenceManager
-                        .smoothedHeading,
+                    smoothedHeading:
+                        navigationIntelligenceManager
+                            .smoothedHeading,
 
-                currentHeading,
+                        currentHeading,
 
-                mapBearing:
+                    mapBearing:
                     radarMap?.getBearing?.() ?? null,
 
-                actualZoom:
-                    radarMap?.getZoom?.() ?? null,
+                    actualZoom:
+                        radarMap?.getZoom?.() ?? null,
 
-                targetZoom:
-                    navigationIntelligenceManager
-                        .targetZoom,
+                    targetZoom:
+                        navigationIntelligenceManager
+                            .targetZoom,
 
-                operatingMode:
-                    navigationIntelligenceManager.mode,
+                    operatingMode:
+                        navigationIntelligenceManager.mode,
 
-                radarPlaying:
-                    radarIsPlaying,
+                    radarPlaying:
+                        radarIsPlaying,
 
-                radarPaused:
-                    radarAnimationPaused
-            });
+                    currentZoom:
+                        radarMap?.getZoom?.(),
+                        
+                    currentBearing:
+                        radarMap?.getBearing?.(),
+                        
+                    fullscreen:
+                        mapPanel?.classList.contains(
+                                "fullscreen-map"
+                        )    
+
+                });
 
                 const accuracy = position.coords.accuracy;
 
@@ -1218,8 +1356,11 @@ function initializeMap() {
             
                 const accuracyFeet = position.coords.accuracy * 3.28084;
 
+                const currentZoom =
+                    radarMap.getZoom();
+
                 mapStatus.textContent = 
-                    `GPS ONLINE ⏺ ACCURACY ±${Math.round(accuracyFeet)} FT`;
+                    `GPS ONLINE ⏺ Z${currentZoom} ⏺ ACCURACY ±${Math.round(accuracyFeet)} FT`;
             },
 
             function (error) {
@@ -1260,25 +1401,79 @@ function initializeMap() {
 }  
 
 async function initializeWeatherRadar() {
-    console.log("Loading weather radar...");
+    console.log("[Radar] Loading frame data...");
+
+    const timestampDisplay =
+        document.getElementById(
+            "radar-timestamp"
+        );
 
     try {
         const response = await fetch(
             "https://api.rainviewer.com/public/weather-maps.json"
         );
 
-        const radarData = await response.json();
+        console.log(
+            "[Radar] Metadata response:",
+            response.status
+        );
 
-        radarFrames = radarData.radar.past;
+        if (!response.ok) {
+            throw new Error(
+                `RainViewer metadata failed: ${response.status}`
+            );
+        }
 
-        console.log("Radar frames loaded:", radarFrames);
+        const radarData =
+            await response.json();
 
-        currentRadarFrame = 0;
+        if (
+            !radarData.radar ||
+            !Array.isArray(
+                radarData.radar.past
+            ) ||
+            radarData.radar.past.length === 0
+        ) {
+            throw new Error(
+                "RainViewer returned no radar frames."
+            );
+        }
 
-        displayRadarFrame(currentRadarFrame);
+        radarFrames =
+            radarData.radar.past;
+            
+        console.log(
+            "[Radar] Loaded frames:",
+            radarFrames.length
+        );    
+
+        currentRadarFrame = 
+            radarFrames.length -1;
+
+        console.log(
+            "[Radar] Starting frame:",
+            currentRadarFrame
+        );
+
+        console.log(
+            `[Radar] ${radarFrames.length} frames loaded`
+        );
+
+        displayRadarFrame(
+            currentRadarFrame
+        );
+
         startRadarAnimation();
     } catch (error) {
-        console.error("Weather radar failed to load:", error);
+        console.error(
+            "[Radar] Initialization failed:",
+            error
+        );
+
+        if (timestampDisplay) {
+            timestampDisplay.textContent =
+                "Radar Unavailable";
+        }
     }
 }
 
@@ -1288,42 +1483,121 @@ function displayRadarFrame(frameIndex) {
         radarFrames.length === 0 ||
         !radarFrames[frameIndex]
     ) {
+        console.warn(
+            "[Radar] Unable to display frame:",
+            frameIndex
+        );
+
+        console.trace(
+            "[Radar] Invalid frame caller"
+        );
+
         return;
     }
 
-    const frame = radarFrames[frameIndex];
+    const frame =
+        radarFrames[frameIndex];
+
+    const currentZoom =
+        radarMap.getZoom();
+
+    const isWideView =
+        currentZoom <= 7;
 
     const radarTileUrl =
         "https://tilecache.rainviewer.com" +
         frame.path +
         "/256/{z}/{x}/{y}/2/1_1.png";
 
-    const newRadarLayer = L.tileLayer(radarTileUrl, {
-        tileSize: 256,
-        opacity: 0,
-        maxNativeZoom: 7,
-        maxZoom: 19,
-        attribution: "RainViewer"
-    });
+    const newRadarLayer =
+        L.tileLayer(radarTileUrl, {
+            tileSize: 256,
+            opacity:
+                isWideView
+                    ? RADAR_OPACITY
+                    : 0,
 
-    newRadarLayer.addTo(radarMap);
+            maxNativeZoom: 7,
+            maxZoom: 19,
+            minZoom: MIN_MAP_ZOOM,
 
-    newRadarLayer.on("load", () => {
-        previousWeatherRadar = weatherRadar;
+            noWrap: true,
+            keepBuffer: 0,
+            updateWhenZooming: false,
+            updateWhenIdle: true,
+            attribution: "RainViewer"
+        });
+
+    /*
+     * In wide view, replace the layer immediately.
+     * Do not wait for the fade animation.
+     */
+    if (isWideView) {
+        if (
+            weatherRadar &&
+            radarLayerGroup.hasLayer(weatherRadar)
+        ) {
+            radarLayerGroup.removeLayer(weatherRadar);
+        }
+
+        if (
+            previousWeatherRadar &&
+            radarLayerGroup.hasLayer(
+                previousWeatherRadar
+            )
+        ) {
+            radarLayerGroup.removeLayer(
+                previousWeatherRadar
+            );
+
+            previousWeatherRadar = null;
+        }
+
+        previousWeatherRadar = null;
         weatherRadar = newRadarLayer;
 
-        fadeInRadarLayer(weatherRadar);
+        weatherRadar.addTo(radarLayerGroup);
+    } else {
+        newRadarLayer.addTo(radarLayerGroup);
 
-        if (previousWeatherRadar) {
-            fadeOutRadarLayer(previousWeatherRadar);
-        }
-    });
+        newRadarLayer.once(
+            "load",
+            function () {
+                previousWeatherRadar =
+                    weatherRadar;
+
+                weatherRadar =
+                    newRadarLayer;
+
+                fadeInRadarLayer(
+                    weatherRadar
+                );
+
+                if (previousWeatherRadar) {
+                    fadeOutRadarLayer(
+                        previousWeatherRadar
+                    );
+                }
+            }
+        );
+    }
 
     updateRadarTimestamp(frame);
 
-    console.log(
-        `Displaying radar frame: ${frameIndex + 1}`
-    );
+    console.log("[Radar]", {
+        frame:
+            frameIndex + 1,
+
+        zoom:
+            currentZoom,
+
+        mode:
+            isWideView
+                ? "STATIC"
+                : "ANIMATED",
+
+        tileSize: 256
+    });
 }
 
 function fadeInRadarLayer(layer) {
@@ -1366,9 +1640,9 @@ function fadeOutRadarLayer(layer) {
     }, fadeStep);
 
     setTimeout(() => {
-        if (radarMap.hasLayer(layer)) {
-            radarMap.removeLayer(layer);
-        }
+        if (radarLayerGroup.hasLayer(layer)) {
+        radarLayerGroup.removeLayer(layer);
+    }
     }, RADAR_LAYER_CLEANUP_DELAY);
 }
 
@@ -1385,8 +1659,6 @@ function startRadarAnimation() {
         if (currentRadarFrame >= radarFrames.length) {
             currentRadarFrame = 0;
         }
-
-        console.log("Displaying radar frame:", currentRadarFrame);
 
         displayRadarFrame(currentRadarFrame);
 
@@ -1418,11 +1690,38 @@ function stopRadarAnimation() {
 }
 
 function updateRadarTimestamp(frame) {
+    const timestampDisplay =
+        document.getElementById(
+            "radar-timestamp"
+        );
+
+    if (!timestampDisplay) {
+        console.error(
+            "[Radar] Timestamp element not found."
+        );
+
+        return;
+    }
+
+    if (
+        !frame ||
+        typeof frame.time !== "number"
+    ) {
+        timestampDisplay.textContent =
+            "Time Unavailable";
+
+        console.error(
+            "[Radar] Invalid frame:",
+            frame
+        );
+
+        return;
+    }
+
     const timestamp =
         new Date(frame.time * 1000);
 
-    document.getElementById("radar-timestamp")
-        .textContent =
+    timestampDisplay.textContent =
         timestamp.toLocaleTimeString([], {
             hour: "numeric",
             minute: "2-digit"
@@ -1487,6 +1786,65 @@ function initializeRadarControls() {
         playButton.textContent = "▶";
     });
 }
+
+function handleRadarZoomLimit() {
+    if (!radarMap) {
+        return;
+    }
+
+    const currentZoom = radarMap.getZoom();
+
+    if (
+        currentZoom < MIN_ANIMATED_RADAR_ZOOM &&
+        radarIsPlaying
+    ) {
+        radarWasPlayingBeforeZoomPause = true;
+        radarPausedForZoom = true;
+
+        stopRadarAnimation();
+
+        const playButton =
+            document.getElementById("radar-play");
+
+        if (playButton) {
+            playButton.textContent = "▶";
+            playButton.title =
+                "Radar paused at wide zoom";
+        }
+
+        console.log(
+            `[Radar] Animation paused at zoom ${currentZoom}`
+        );
+
+        return;
+    }
+
+    if (
+        currentZoom >= MIN_ANIMATED_RADAR_ZOOM &&
+        radarPausedForZoom
+    ) {
+        radarPausedForZoom = false;
+
+        const playButton =
+            document.getElementById("radar-play");
+
+        if (radarWasPlayingBeforeZoomPause) {
+            startRadarAnimation();
+
+            if (playButton) {
+                playButton.textContent = "⏸";
+                playButton.title =
+                    "Pause radar animation";
+            }
+        }
+
+        radarWasPlayingBeforeZoomPause = false;
+
+        console.log(
+            `[Radar] Animation restored at zoom ${currentZoom}`
+        );
+    }
+}
        
 
 // ====================================
@@ -1538,20 +1896,30 @@ function addTestLightningStrike() {
 // ===================================
 
 function initializeWarnings() {
-    console.log("Loading NWS warnings...");
+    if (warningsLayer) {
+        return;
+    }
 
-    warningsLayer = L.layerGroup().addTo(radarMap);
+    console.log(
+        "Initializing NWS warning layer..."
+    );
+
+    warningsLayer =
+        L.layerGroup().addTo(radarMap);
 
     layerControl.addOverlay(
         warningsLayer,
         "🚨 NWS Alerts"
     );
 
-    loadNwsWarnings();
+    warningsRefreshTimer =
+        setInterval(
+            loadNwsWarnings,
+            5 * 60 * 1000
+        );
 
-    warningsRefreshTimer = setInterval(
-        loadNwsWarnings,
-        5 * 60 * 1000
+    console.log(
+        "NWS warning layer registered."
     );
 }
 
@@ -1840,6 +2208,7 @@ expandMapButton.addEventListener("click", function () {
 
     setTimeout(function () {
         radarMap.invalidateSize();
+        updateMapZoomDisplay();
     }, 100);
 });
 
@@ -1856,6 +2225,8 @@ requestWeatherLocation();
 
 initializeMap();
 
+initializeWarnings();
+
 initializeWeatherRadar();
 
 initializeRadarControls();
@@ -1864,7 +2235,7 @@ initializeLightning();
 
 const exportDiagnosticsButton =
     document.getElementById(
-        "export-diagnostics-btn"
+        "export-log-btn"
     );
 
 exportDiagnosticsButton?.addEventListener(

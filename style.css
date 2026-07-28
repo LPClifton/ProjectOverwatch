@@ -125,6 +125,30 @@ border: 2px solid var(--system-accent, #4fd5ff);
         drop-shadow(0 0 20px #ffcc00)
 }
 
+#export-log-btn {
+    width: 56px;
+    height: 56px;
+
+    border: 2px solid var(--system-accent);
+    border-radius: 50%;
+
+    background: rgba(0, 0, 0, 0.85);
+    color: var(--system-accent);
+
+    font-size: 24px;
+    cursor: pointer;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    transition: 0.2s ease;
+}
+
+#export-log-btn:hover {
+    background: rgba(79, 213, 255, 0.15);
+}
+
 #system-footer {
     position: fixed;
     left: 0;

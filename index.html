@@ -49,14 +49,14 @@
             <p id="system-status-text">Online</p>
         </section>
 
-        <section class="panel">
-            <h2>Radio Scanner</h2>
-            <p>Loading...</p>
-        </section>
-
         <section class="panel" id="alerts-panel">
             <h2 id="alerts-heading">Alerts</h2>
             <p id="alerts-status">None</p>
+        </section>
+
+        <section class="panel">
+            <h2>Radio Scanner</h2>
+            <p>Loading...</p>
         </section>
 
         <section class="panel map-panel" id="map-panel">
@@ -71,6 +71,8 @@
 
                 <div id="map-controls">
                     <span id="radar-timestamp">Loading...</span>
+
+                    <span id="map-zoom-level">Z--</span>
 
                     <button id="radar-prev" type="button" aria-label="Previous radar frame">
                         ⏮️
@@ -98,10 +100,10 @@
                     </button>
 
                     <button
-                        id="export-diagnostics-btn"
-                        type="button"
-                    >
-                        Export Log
+                        id="export-log-btn"
+                        aria-label="Export Diagnostics"
+                        title="Export Diagnostics">
+                        📝
                     </button>
                 </div>
          </div>
@@ -125,10 +127,10 @@
     </main>
 
     <footer id="system-footer">
-    <span id="version-status">Project Overwatch v0.4.3</span>
+    <span id="version-status">Project Overwatch v0.4.4</span>
 
     <span id="build-date">
-        Build: 2026-07-2627
+        Build: 2026-07-28
     </span>
 
     <span id="system-status">
@@ -156,5 +158,5 @@
 
 </body>    
 </html>
-Version 0.4.3
+Version 0.4.4
 
