@@ -34,6 +34,8 @@ const RADAR_FADE_DURATION = 350
 const RADAR_LAYER_CLEANUP_DELAY = 450;
 const MIN_MAP_ZOOM = 5;
 const MIN_ANIMATED_RADAR_ZOOM = 8;
+const RADAR_REFRESH_INTERVAL_MS =
+    5 * 60 * 1000;
 
 
 const SENTINEL_RADIUS_MILES = 250;
@@ -74,6 +76,8 @@ let radarIsPlaying = true;
 let systemAccentFlashTimer = null;
 let radarPausedForZoom = false;
 let radarWasPlayingBeforeZoomPause = false;
+let radarMetadataRefreshTimer = null;
+let radarMetadataRefreshInProgress = false;
 
 let warningsRefreshTimer;
 let initialWarningsLoaded = false;
@@ -314,6 +318,14 @@ function getDrivingZoom(speedMph) {
     }
 
     return 13;
+}
+
+function convertHeadingToMapBearing(heading) {
+    if (heading === null) {
+        return 0;
+    }
+
+    return ((heading % 360) + 360) % 360;
 }
 
 // =============================
@@ -988,8 +1000,13 @@ function updateNavigationDisplay() {
         typeof radarMap.setBearing ===
             "function"
     ) {
+        const mapBearing =
+            convertHeadingToMapBearing(
+                currentHeading
+        );
+
         radarMap.setBearing(
-            currentHeading
+            mapBearing
         );
     }
 
@@ -1391,7 +1408,14 @@ function initializeMap() {
                         navigationIntelligenceManager
                             .smoothedHeading,
 
-                        currentHeading,
+                    currentHeading,
+
+                    commandedMapBearing:
+                        currentHeading === null
+                            ? null
+                            : convertHeadingToMapBearing(
+                                currentHeading
+                            ),
 
                     mapBearing:
                     radarMap?.getBearing?.() ?? null,
@@ -1482,83 +1506,215 @@ function initializeMap() {
 
 }  
 
-async function initializeWeatherRadar() {
-    console.log("[Radar] Loading frame data...");
+// =============================
+// Weather Radar
+// =============================
 
-    const timestampDisplay =
-        document.getElementById(
-            "radar-timestamp"
+// Initialization
+async function initializeWeatherRadar() {
+    console.log(
+        "Initializing weather radar"
+    );
+
+    await refreshRadarMetadata();
+
+    if (radarFrames.length === 0) {
+        console.error(
+            "Weather radar could not be initialized."
         );
+
+        const timestampDisplay =
+            document.getElementById(
+                "radar-timestamp"
+            );
+
+        if (timestampDisplay) {
+            timestampDisplay.textContent =
+                "Radar Unavailable";
+        }
+
+        return;
+    }
+
+    currentRadarFrame =
+        radarFrames.length - 1;
+
+    console.log(
+        "[Radar] Loaded frames:",
+        radarFrames.length
+    );
+
+    console.log(
+        "[Radar] Starting frame:",
+        currentRadarFrame
+    );
+
+    displayRadarFrame(
+        currentRadarFrame
+    );
+
+    startRadarAnimation();
+    startRadarMetadataRefresh();
+}   
+
+async function refreshRadarMetadata() {
+    if (radarMetadataRefreshInProgress) {
+        console.log(
+            "Radar metadata refresh already in progress."
+        );
+
+        return;
+    }
+
+    radarMetadataRefreshInProgress = true;
 
     try {
-        const response = await fetch(
-            "https://api.rainviewer.com/public/weather-maps.json"
+        console.log(
+            "Refreshing RainViewer radar metadata..."
         );
 
-        console.log(
-            "[Radar] Metadata response:",
-            response.status
+        const response = await fetch(
+            "https://api.rainviewer.com/public/weather-maps.json",
+            {
+                cache: "no-store"
+            }
         );
 
         if (!response.ok) {
             throw new Error(
-                `RainViewer metadata failed: ${response.status}`
+                `RainViewer request failed: ${response.status}`
             );
         }
 
         const radarData =
             await response.json();
 
+        const updatedFrames =
+            radarData?.radar?.past;
+
         if (
-            !radarData.radar ||
-            !Array.isArray(
-                radarData.radar.past
-            ) ||
-            radarData.radar.past.length === 0
+            !Array.isArray(updatedFrames) ||
+            updatedFrames.length === 0
         ) {
             throw new Error(
                 "RainViewer returned no radar frames."
             );
         }
 
-        radarFrames =
-            radarData.radar.past;
-            
-        console.log(
-            "[Radar] Loaded frames:",
+        const previousLatestFrame =
+            radarFrames.length > 0
+                ? radarFrames[
+                    radarFrames.length - 1
+                ]?.time
+                : null;
+
+        const updatedLatestFrame =
+            updatedFrames[
+                updatedFrames.length - 1
+            ]?.time;
+
+        radarFrames = updatedFrames.map(
+            frame => ({
+                ...frame,
+                host: radarData.host
+            })
+        );
+
+        const newDataAvailable =
+            previousLatestFrame !==
+            updatedLatestFrame;
+
+        if (newDataAvailable) {
+            console.log(
+                "New radar frames available.",
+                {
+                    previousLatestFrame,
+                    updatedLatestFrame,
+                    frameCount:
+                        radarFrames.length
+                }
+            );
+        } else {
+            console.log(
+                "Radar metadata is current.",
+                {
+                    latestFrame:
+                        updatedLatestFrame,
+                    frameCount:
+                        radarFrames.length
+                }
+            );
+        }
+
+        /*
+         * Keep the animation position valid
+         * after replacing the frame array.
+         */
+        if (
+            currentRadarFrame >=
             radarFrames.length
-        );    
+        ) {
+            currentRadarFrame =
+                radarFrames.length - 1;
+        }
 
-        currentRadarFrame = 
-            radarFrames.length -1;
+        /*
+         * When paused on the latest frame,
+         * advance to the newly received
+         * latest frame immediately.
+         */
+        
+        if (
+            !radarIsPlaying &&
+            newDataAvailable
+        ) {
+            currentRadarFrame =
+                radarFrames.length - 1;
 
-        console.log(
-            "[Radar] Starting frame:",
-            currentRadarFrame
-        );
-
-        console.log(
-            `[Radar] ${radarFrames.length} frames loaded`
-        );
-
-        displayRadarFrame(
-            currentRadarFrame
-        );
-
-        startRadarAnimation();
+            displayRadarFrame(
+                currentRadarFrame
+            );
+        }
     } catch (error) {
         console.error(
-            "[Radar] Initialization failed:",
+            "Unable to refresh radar metadata:",
             error
         );
 
-        if (timestampDisplay) {
-            timestampDisplay.textContent =
-                "Radar Unavailable";
-        }
+        notificationManager.addAlert({
+            id: "radar-refresh-error",
+            source: "RainViewer",
+            createdBy: "Radar",
+            title:
+                "Radar data refresh unavailable",
+            priority: "low",
+            icon: "🔵"
+        });
+    } finally {
+        radarMetadataRefreshInProgress =
+            false;
     }
 }
 
+function startRadarMetadataRefresh() {
+    if (radarMetadataRefreshTimer) {
+        clearInterval(
+            radarMetadataRefreshTimer
+        );
+    }
+
+    radarMetadataRefreshTimer =
+        setInterval(
+            refreshRadarMetadata,
+            RADAR_REFRESH_INTERVAL_MS
+        );
+
+    console.log(
+        "Automatic radar refresh started."
+    );
+}
+
+// Rendering
 function displayRadarFrame(frameIndex) {
     if (
         !radarMap ||
@@ -1587,7 +1743,7 @@ function displayRadarFrame(frameIndex) {
         currentZoom <= 7;
 
     const radarTileUrl =
-        "https://tilecache.rainviewer.com" +
+        frame.host +
         frame.path +
         "/256/{z}/{x}/{y}/2/1_1.png";
 
@@ -1728,6 +1884,7 @@ function fadeOutRadarLayer(layer) {
     }, RADAR_LAYER_CLEANUP_DELAY);
 }
 
+// Animation
 function startRadarAnimation() {
     if (radarAnimationTimer) {
         clearTimeout(radarAnimationTimer);
@@ -1771,6 +1928,7 @@ function stopRadarAnimation() {
     radarIsPlaying = false;
 }
 
+// User Interface
 function updateRadarTimestamp(frame) {
     const timestampDisplay =
         document.getElementById(
@@ -1927,6 +2085,8 @@ function handleRadarZoomLimit() {
         );
     }
 }
+
+
        
 
 // ====================================
