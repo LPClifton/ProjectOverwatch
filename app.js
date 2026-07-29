@@ -17,7 +17,8 @@ const OPERATING_MODES = {
 
 const DEFAULT_LATITUDE = 30.3027;
 const DEFAULT_LONGITUDE = -93.1907;
-const DEFAULT_MAP_ZOOM = 9
+const DEFAULT_MAP_ZOOM = 9;
+const PARKED_MAP_ZOOM = 17;
 const HEADING_SAMPLE_WINDOW_MS = 5000;
 const MIN_HEADING_SPEED_MPH = 3;
 
@@ -100,6 +101,9 @@ function determineOperatingMode() {
 }
 
 function updateOperatingMode() {
+    const previousOperatingMode =
+        operatingMode;
+
     const newOperatingMode =
         determineOperatingMode();
 
@@ -111,11 +115,34 @@ function updateOperatingMode() {
 
     console.log(
         "Operating mode changed:",
+        previousOperatingMode,
+        "->",
         operatingMode
     );
 
+    diagnosticLog("Operating Mode", {
+        event: "Operating mode changed",
+        previousMode:
+            previousOperatingMode,
+        newMode:
+            operatingMode,
+        currentSpeedMph,
+        averageSpeedMph:
+            navigationIntelligenceManager
+                .averageSpeedMph
+    });
+
     updateMovementIcon();
-    updateNavigationDisplay();
+
+    if (
+        operatingMode ===
+        OPERATING_MODES.PARKED
+    ) {
+        applyParkedMapState();
+    } else {
+        updateNavigationDisplay();
+    }
+
     updateSystemStatus();
 }
 
@@ -809,6 +836,61 @@ function updateAlertsPanel() {
 // =============================
 // Navigation Functions
 // =============================
+
+function applyParkedMapState() {
+    if (
+        !radarMap ||
+        currentLatitude === null ||
+        currentLongitude === null
+    ) {
+        return;
+    }
+
+    const previousBearing =
+        radarMap.getBearing?.() ?? null;
+
+    const previousZoom =
+        radarMap.getZoom?.() ?? null;
+
+    diagnosticLog("Navigation Command", {
+        event: "Applying parked map state",
+        previousBearing,
+        targetBearing: 0,
+        previousZoom,
+        targetZoom: PARKED_MAP_ZOOM
+    });
+
+    if (
+        typeof radarMap.setBearing ===
+        "function"
+    ) {
+        radarMap.setBearing(0);
+    }
+
+    /*
+     * Recenter on the vehicle to remove the
+     * driving look-ahead offset, then apply
+     * the parked zoom level.
+     */
+    radarMap.setView(
+        [
+            currentLatitude,
+            currentLongitude
+        ],
+        PARKED_MAP_ZOOM,
+        {
+            animate: false
+        }
+    );
+
+    diagnosticLog("Navigation Command", {
+        event: "Parked map state applied",
+        actualBearing:
+            radarMap.getBearing?.() ?? null,
+        actualZoom:
+            radarMap.getZoom?.() ?? null
+    });
+}
 
 function updateMovementIcon() {
     if (!locationMarker) {
