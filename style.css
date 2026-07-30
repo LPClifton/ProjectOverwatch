@@ -777,3 +777,61 @@ body.map-open {
         opacity: 1;
     }
 }
+
+/* ================================
+   Context Bar
+================================ */
+
+#context-bar {
+
+    min-height: 54px;
+
+    padding: 10px 16px;
+
+    margin-bottom: 14px;
+
+    border-radius: 8px;
+
+    background: rgba(20,20,20,.90);
+
+    border: 1px solid #4fd5ff;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+}
+
+.context-title {
+
+    font-weight: 600;
+
+    font-size: 1rem;
+}
+
+.context-detail {
+
+    opacity: .8;
+
+    font-size: .82rem;
+
+    margin-top: 3px;
+}
+
+#context-bar.context-low {
+    border-color: #4fd5ff;
+}
+
+#context-bar.context-normal {
+    border-color: #38bdf8;
+}
+
+#context-bar.context-high {
+    border-color: #f59e0b;
+}
+
+#context-bar.context-critical {
+    border-color: #ef4444;
+    box-shadow: 0 0 18px rgba(239,68,68,.45);
+}

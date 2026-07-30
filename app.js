@@ -161,6 +161,84 @@ function updateOperatingMode() {
     updateSystemStatus();
 }
 
+// =============================
+// Context Manager
+// =============================
+
+const contextManager = {
+
+    messages: [],
+
+    setStatus(status) {
+
+        this.messages = this.messages.filter(
+            message => message.source !== status.source
+        );
+
+        this.messages.push(status);
+
+        this.render();
+    },
+
+    clearStatus(source) {
+
+        this.messages = this.messages.filter(
+            message => message.source !== source
+        );
+
+        this.render();
+    },
+
+    render() {
+
+        const contextBar =
+            document.getElementById("context-bar");
+
+        if (!contextBar) {
+            return;
+        }
+
+        if (this.messages.length === 0) {
+
+            contextBar.innerHTML =
+                "⏳ Initializing Systems...";
+
+            return;
+        }
+
+        const priorityOrder = {
+            critical: 4,
+            high: 3,
+            normal: 2,
+            low: 1
+        };
+
+        const highestPriority =
+            [...this.messages].sort(
+                (a, b) =>
+                    priorityOrder[b.priority] -
+                    priorityOrder[a.priority]
+            )[0];
+
+        contextBar.innerHTML = `
+            <div class="context-title">
+                ${highestPriority.icon}
+                ${highestPriority.title}
+            </div>
+
+            <div class="context-detail">
+                ${highestPriority.detail}
+            </div>
+        `;
+
+        contextBar.className = "";
+
+        contextBar.classList.add(
+            `context-${highestPriority.priority}`
+        );
+    }
+};
+
 
 // =============================
 // Utility Functions
@@ -1279,25 +1357,33 @@ function updateClock() {
 
 function updateSystemStatus() {
     const systemStatus =
-        document.getElementById("system-status-text");
+        document.getElementById(
+            "system-status-text"
+        );
 
     if (!systemStatus) {
         return;
     }
 
-    const headingText =
-        currentHeading === null
-            ? "Heading Unavailable"
-            : `${Math.round(currentHeading)}° ` +
-              `${bearingToCompass(currentHeading)}`;
+    let statusText;
 
-    const movementText =
-        currentSpeedMph < 2
-            ? "Stopped"
-            : `${Math.round(currentSpeedMph)} MPH`;
+    switch (operatingMode) {
+        case OPERATING_MODES.DRIVING:
+            statusText =
+                `DRIVING • ${Math.round(currentSpeedMph)} MPH`;
+            break;
+
+        case OPERATING_MODES.WALKING:
+            statusText =
+                `WALKING • ${Math.round(currentSpeedMph)} MPH`;
+            break;
+
+        default:
+            statusText = "PARKED";
+    }
 
     systemStatus.textContent =
-        `GPS ONLINE • ${movementText} • ${headingText}`;
+        statusText;
 }
 
 
@@ -1543,6 +1629,7 @@ function initializeMap() {
             .openOn(radarMap);
     });
 
+    mapStatus.hidden = false;
     mapStatus.textContent = "Requesting Location";
 
     if ("geolocation" in navigator) {
@@ -1687,15 +1774,33 @@ function initializeMap() {
                 const currentZoom =
                     radarMap.getZoom();
 
-                mapStatus.textContent = 
-                    `GPS ONLINE ⏺ Z${currentZoom} ⏺ ACCURACY ±${Math.round(accuracyFeet)} FT`;
+                mapStatus.textContent = "";
+                mapStatus.hidden = true;
+
+                contextManager.setStatus({
+                    source: "gps",
+                    priority: "critical",
+                    icon: "🔴",
+                    title: "GPS Signal Lost",
+                    detail: "Location unavailable"
+                });    
+
+                 contextManager.setStatus({
+                    source: "gps",
+                    priority: "normal",
+                    icon: "🛰️",
+                    title: "GPS Locked",
+                    detail: "Navigation ready"
+                });   
             },
 
             function (error) {
                 console.error("GPS error:", error.code, error.message);
 
-                mapStatus.textContent = 
-                `GPS ERROR ${error.code} ⏺ ${error.message}`;
+                mapStatus.hidden = false;
+
+                mapStatus.textContent =
+                    `GPS ERROR ${error.code} • ${error.message}`;
 
                 if (!locationMarker) {
                     locationMarker = L.marker([
@@ -1715,7 +1820,17 @@ function initializeMap() {
             }
         );
     } else {
-        mapStatus.textContent = "GPS Unsupported";
+        
+        mapStatus.hidden = false;
+        mapStatus.textContent = "GPS Unsupported";      
+
+        contextManager.setStatus({
+            source: "gps",
+            priority: "critical",
+            icon: "🔴",
+            title: "GPS Unsupported",
+            detail: "Location services unavailable"
+        });
 
         locationMarker = L.marker([
             defaultLatitude,
