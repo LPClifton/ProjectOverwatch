@@ -29,4 +29,14 @@ Status
 
 Recommended for continued real-world driving and weather testing.
 
+Release Date: July 29, 2026
 
+Added
+
+Context Bar
+
+Fixed 
+
+PS Status, Accuracy, Zoom
+
+Stable
