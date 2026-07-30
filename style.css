@@ -378,6 +378,83 @@ body.map-open {
     -webkit-backdrop-filter: blur(8px);
 }
 
+#radar-freshness {
+    position: static;
+
+    padding: 8px 12px;
+
+    border: 1px solid rgba(79, 213, 255, 0.45);
+    border-radius: 8px;
+
+    background: rgba(5, 9, 13, 0.72);
+    color: #d9f7ff;
+
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+
+    transition:
+        color 0.25s ease,
+        opacity 0.25s ease,
+        text-shadow 0.25s ease;
+}
+
+#radar-freshness {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+
+    gap: 2px;
+}
+
+.radar-freshness-primary {
+    display: block;
+
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.radar-freshness-secondary {
+    display: block;
+
+    color: rgba(217, 247, 255, 0.7);
+
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0.2px;
+}
+
+#radar-freshness.radar-fresh {
+    color: #7dff9b;
+}
+
+#radar-freshness.radar-aging {
+    color: #ffd45c;
+}
+
+#radar-freshness.radar-stale {
+    color: #ff9f43;
+}
+
+#radar-freshness.radar-unavailable {
+    color: #ff5c5c;
+}
+
+#radar-freshness.radar-refreshing {
+    color: #4fd5ff;
+
+    animation:
+        radar-status-pulse
+        1.2s ease-in-out
+        infinite;
+}
+
 /* ================================
     Map Marker Icons
 ================================ */  
@@ -656,5 +733,47 @@ body.map-open {
 @media (orientation: portrait) and (max-width: 700px) {
     .map-panel {
         order: -1;
+    }
+}
+
+#radar-timestamp {
+    transition:
+        color 0.25s ease,
+        opacity 0.25s ease,
+        text-shadow 0.25s ease;
+}
+
+#radar-timestamp.radar-fresh {
+    color: #7dff9b;
+}
+
+#radar-timestamp.radar-aging {
+    color: #ffd45c;
+}
+
+#radar-timestamp.radar-stale {
+    color: #ff9f43;
+}
+
+#radar-timestamp.radar-unavailable {
+    color: #ff5c5c;
+}
+
+#radar-timestamp.radar-refreshing {
+    color: #4fd5ff;
+    animation:
+        radar-status-pulse
+        1.2s ease-in-out
+        infinite;
+}
+
+@keyframes radar-status-pulse {
+    0%,
+    100% {
+        opacity: 0.55;
+    }
+
+    50% {
+        opacity: 1;
     }
 }

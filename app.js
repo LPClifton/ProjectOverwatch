@@ -30,6 +30,13 @@ const MAP_LOOK_AHEAD_RATIO = 0.22;
 const RADAR_OPACITY = 0.6;
 const RADAR_FRAME_DELAY = 2000;
 const RADAR_END_PAUSE = 4000;
+const RADAR_FRESH_AGE_MS = 8 * 60 * 1000;
+const RADAR_AGING_AGE_MS = 15 * 60 * 1000;
+const RADAR_STALE_AGE_MS = 25 * 60 * 1000;
+
+const RADAR_STATUS_UPDATE_INTERVAL_MS =
+    30 * 1000;
+
 const RADAR_FADE_DURATION = 350
 const RADAR_LAYER_CLEANUP_DELAY = 450;
 const MIN_MAP_ZOOM = 5;
@@ -73,6 +80,10 @@ let radarFrames = [];
 let currentRadarFrame = 0;
 let radarAnimationTimer = null;
 let radarIsPlaying = true;
+let lastRadarDataTimestamp = null;
+let lastRadarRefreshTime = null;
+let radarRefreshInProgress = false;
+let radarStatusTimer = null;
 let systemAccentFlashTimer = null;
 let radarPausedForZoom = false;
 let radarWasPlayingBeforeZoomPause = false;
@@ -326,6 +337,214 @@ function convertHeadingToMapBearing(heading) {
     }
 
     return ((heading % 360) + 360) % 360;
+}
+
+function formatRadarAge(ageMs) {
+    if (
+        ageMs === null ||
+        !Number.isFinite(ageMs) ||
+        ageMs < 0
+    ) {
+        return "Unknown";
+    }
+
+    const totalSeconds =
+        Math.floor(ageMs / 1000);
+
+    if (totalSeconds < 60) {
+        return "Less than 1 min ago";
+    }
+
+    const totalMinutes =
+        Math.floor(totalSeconds / 60);
+
+    if (totalMinutes < 60) {
+        return `${totalMinutes} min ago`;
+    }
+
+    const totalHours =
+        Math.floor(totalMinutes / 60);
+
+    const remainingMinutes =
+        totalMinutes % 60;
+
+    if (remainingMinutes === 0) {
+        return `${totalHours} hr ago`;
+    }
+
+    return (
+        `${totalHours} hr ` +
+        `${remainingMinutes} min ago`
+    );
+}
+
+function formatRadarCheckAge(ageMs) {
+    if (
+        ageMs === null ||
+        !Number.isFinite(ageMs) ||
+        ageMs < 0
+    ) {
+        return "not yet checked";
+    }
+
+    const totalSeconds =
+        Math.floor(ageMs / 1000);
+
+    if (totalSeconds < 5) {
+        return "just now";
+    }
+
+    if (totalSeconds < 60) {
+        return `${totalSeconds} sec ago`;
+    }
+
+    const totalMinutes =
+        Math.floor(totalSeconds / 60);
+
+    if (totalMinutes === 1) {
+        return "1 min ago";
+    }
+
+    return `${totalMinutes} min ago`;
+}
+
+function updateRadarFreshnessDisplay() {
+    const radarFreshnessElement =
+        document.getElementById(
+            "radar-freshness"
+        );
+
+    if (!radarFreshnessElement) {
+        return;
+    }
+
+    radarFreshnessElement.classList.remove(
+        "radar-fresh",
+        "radar-aging",
+        "radar-stale",
+        "radar-unavailable",
+        "radar-refreshing"
+    );
+
+    if (radarRefreshInProgress) {
+        radarFreshnessElement.innerHTML =
+            `
+                <span class="radar-freshness-primary">
+                    Synchronizing radar...
+                </span>
+                <span class="radar-freshness-secondary">
+                    Checking for new imagery
+                </span>
+            `;
+
+        radarFreshnessElement.classList.add(
+            "radar-refreshing"
+        );
+
+        return;
+    }
+
+    const checkAgeMs =
+        lastRadarRefreshTime === null
+            ? null
+            : Date.now() -
+                lastRadarRefreshTime;
+
+    const formattedCheckAge =
+        formatRadarCheckAge(
+            checkAgeMs
+        );
+
+    if (lastRadarDataTimestamp === null) {
+        radarFreshnessElement.innerHTML =
+            `
+                <span class="radar-freshness-primary">
+                    Radar data unavailable
+                </span>
+                <span class="radar-freshness-secondary">
+                    Last checked ${formattedCheckAge}
+                </span>
+            `;
+
+        radarFreshnessElement.classList.add(
+            "radar-unavailable"
+        );
+
+        return;
+    }
+
+    const radarAgeMs =
+        Date.now() -
+        lastRadarDataTimestamp;
+
+    const formattedRadarAge =
+        formatRadarAge(
+            radarAgeMs
+        );
+
+    let primaryText =
+        `Radar updated ${formattedRadarAge}`;
+
+    let statusClass =
+        "radar-fresh";
+
+    if (
+        radarAgeMs >=
+        RADAR_STALE_AGE_MS
+    ) {
+        primaryText =
+            `Radar unavailable — ${formattedRadarAge}`;
+
+        statusClass =
+            "radar-unavailable";
+    } else if (
+        radarAgeMs >=
+        RADAR_AGING_AGE_MS
+    ) {
+        primaryText =
+            `Radar stale — ${formattedRadarAge}`;
+
+        statusClass =
+            "radar-stale";
+    } else if (
+        radarAgeMs >=
+        RADAR_FRESH_AGE_MS
+    ) {
+        primaryText =
+            `Radar aging — ${formattedRadarAge}`;
+
+        statusClass =
+            "radar-aging";
+    }
+
+    radarFreshnessElement.innerHTML =
+        `
+            <span class="radar-freshness-primary">
+                ${primaryText}
+            </span>
+            <span class="radar-freshness-secondary">
+                Last checked ${formattedCheckAge}
+            </span>
+        `;
+
+    radarFreshnessElement.classList.add(
+        statusClass
+    );
+}
+
+function startRadarFreshnessMonitor() {
+    if (radarStatusTimer !== null) {
+        clearInterval(
+            radarStatusTimer
+        );
+    }
+
+    updateRadarFreshnessDisplay();
+
+    radarStatusTimer = setInterval(
+        updateRadarFreshnessDisplay,
+        RADAR_STATUS_UPDATE_INTERVAL_MS
+    );
 }
 
 // =============================
@@ -1569,6 +1788,9 @@ async function refreshRadarMetadata() {
         return;
     }
 
+    radarRefreshInProgress = true;
+    updateRadarFreshnessDisplay();      
+
     radarMetadataRefreshInProgress = true;
 
     try {
@@ -1616,12 +1838,34 @@ async function refreshRadarMetadata() {
                 updatedFrames.length - 1
             ]?.time;
 
+        const updatedLatestFrameSeconds =
+            Number(updatedLatestFrame);
+
+        if (    
+            !Number.isFinite(
+                updatedLatestFrameSeconds
+            )
+        ) {
+            throw new Error(
+                "RainViewer returned an invalid radar timestamp."
+            );
+        }   
+
         radarFrames = updatedFrames.map(
             frame => ({
                 ...frame,
                 host: radarData.host
             })
         );
+
+        lastRadarRefreshTime =
+            Date.now();
+
+        lastRadarDataTimestamp =
+            updatedLatestFrameSeconds *
+            1000;
+
+        updateRadarFreshnessDisplay();
 
         const newDataAvailable =
             previousLatestFrame !==
@@ -1696,6 +1940,11 @@ async function refreshRadarMetadata() {
     } finally {
         radarMetadataRefreshInProgress =
             false;
+
+        radarRefreshInProgress =
+            false;
+
+        updateRadarFreshnessDisplay();
     }
 }
 
@@ -2477,6 +2726,8 @@ initializeWeatherRadar();
 initializeRadarControls();
 
 initializeLightning();
+
+startRadarFreshnessMonitor();
 
 const exportDiagnosticsButton =
     document.getElementById(
