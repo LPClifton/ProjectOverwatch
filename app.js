@@ -1005,8 +1005,11 @@ function updateNavigationDisplay() {
                 currentHeading
         );
 
+        const visualMapBearing =
+            (360 - mapBearing) % 360;
+
         radarMap.setBearing(
-            mapBearing
+            visualMapBearing
         );
     }
 
