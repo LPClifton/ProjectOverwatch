@@ -50,6 +50,47 @@ const SENTINEL_RADIUS_MILES = 250;
 const DEFAULT_SYSTEM_ACCENT = "#4fd5ff";
 const ALERT_FLASH_DURATION = 3000;
 
+const SENTINEL_RELEVANCE_WEIGHTS = {
+    basePriority: {
+        critical: 1000,
+        high: 700,
+        medium: 400,
+        low: 100
+    },
+
+    severity: {
+        extreme: 220,
+        severe: 150,
+        moderate: 75,
+        minor: 25,
+        unknown: 0
+    },
+
+    urgency: {
+        immediate: 180,
+        expected: 90,
+        future: 30,
+        past: -100,
+        unknown: 0
+    },
+
+    certainty: {
+        observed: 120,
+        likely: 75,
+        possible: 25,
+        unlikely: -40,
+        unknown: 0
+    },
+
+    currentLocation: 300,
+    aheadOfTravel: 140,
+    nearRoute: 80,
+    behindTravel: -40,
+
+    expiringSoon: 60,
+    longDuration: 15
+};
+
 
 // =============================
 // Global Variables
@@ -92,6 +133,9 @@ let radarMetadataRefreshInProgress = false;
 
 let warningsRefreshTimer;
 let initialWarningsLoaded = false;
+
+const nwsZoneGeometryCache = new Map();
+const nwsZoneRequestCache = new Map();
 
 let tempestSocket;
 let tempestReconnectTimer;
@@ -936,41 +980,50 @@ const notificationManager = {
     },
     
     addAlert(alert) {
-        const existingAlert = this.alerts.find(
-            existing => existing.id === alert.id
+    const existingAlert =
+        this.alerts.find(
+            existing =>
+                existing.id === alert.id
         );
 
-        if (existingAlert) {
-            Object.assign(existingAlert, alert);
-            existingAlert._syncSeen = true;
-        } else {
-            alert._syncSeen = true;
-            this.alerts.push(alert);
+    if (existingAlert) {
+        Object.assign(
+            existingAlert,
+            alert
+        );
 
-            console.log(
-                "🚨 New Alert:",
-                alert.title || alert.event
+        existingAlert._syncSeen = true;
+    } else {
+        alert._syncSeen = true;
+
+        this.alerts.push(alert);
+
+        console.log(
+            "🚨 New Alert:",
+            alert.title ||
+            alert.event
+        );
+
+        const alertColor =
+            this.getAlertColor(
+                alert.priority
             );
 
-            if (initializedAlertSources.has(alert.source)) {
-            const alertColor =
-                this.getAlertColor(alert.priority);
-
-            flashSystemAccent(alertColor);
-        }
+        flashSystemAccent(
+            alertColor
+        );
     }
 
-        
+    updateAlertsPanel();
+},
 
-        updateAlertsPanel();
-    },  
+    
+    
 
     getAlerts() {
         return this.alerts;
     }
 };
-
-let alertFlashTimer = null;
 
 
 function flashSystemAccent(alertColor) {
@@ -1012,17 +1065,23 @@ function getAlertColor(priority) {
 }
 
 function updateAlertsPanel() {
-    
     const alertsHeading =
-        document.getElementById("alerts-heading");
+        document.getElementById(
+            "alerts-heading"
+        );
 
     const alertsPanel =
-        document.getElementById("alerts-panel");
+        document.getElementById(
+            "alerts-panel"
+        );
 
     const alertsStatus =
-        document.getElementById("alerts-status");
+        document.getElementById(
+            "alerts-status"
+        );
 
-    if (!alertsPanel || 
+    if (
+        !alertsPanel ||
         !alertsHeading ||
         !alertsStatus
     ) {
@@ -1054,11 +1113,21 @@ function updateAlertsPanel() {
     );
 
     if (alerts.length === 0) {
-        alertsPanel.classList.add("alert-clear");
-        alertsHeading.classList.add("alert-clear");
-        alertsStatus.classList.add("alert-clear");
+        alertsPanel.classList.add(
+            "alert-clear"
+        );
 
-        alertsStatus.textContent = "🟢 All Clear";
+        alertsHeading.classList.add(
+            "alert-clear"
+        );
+
+        alertsStatus.classList.add(
+            "alert-clear"
+        );
+
+        alertsStatus.textContent =
+            "🟢 All Clear";
+
         return;
     }
 
@@ -1069,24 +1138,132 @@ function updateAlertsPanel() {
         low: 1
     };
 
-    const highestAlert = [...alerts].sort(
-        function (alertA, alertB) {
-            const priorityA =
-                alertA.priority ||
-                alertA.severity ||
-                "low";
+    /*
+     * Calculate or refresh the relevance score
+     * immediately before sorting. This allows
+     * distance, expiration, and direction data
+     * to influence the current ranking.
+     */
+    alerts.forEach(alert => {
+        if (
+            typeof calculateSentinelRelevanceScore ===
+            "function"
+        ) {
+            alert.relevanceScore =
+                calculateSentinelRelevanceScore({
+                    priority:
+                        alert.priority ||
+                        alert.severity ||
+                        "low",
 
-            const priorityB =
-                alertB.priority ||
-                alertB.severity ||
-                "low";
+                    severity:
+                        alert.capSeverity,
 
-            return (
-                priorityOrder[priorityB] -
-                priorityOrder[priorityA]
-            );
+                    urgency:
+                        alert.urgency,
+
+                    certainty:
+                        alert.certainty,
+
+                    distanceMiles:
+                        alert.distance,
+
+                    direction:
+                        alert.direction,
+
+                    expires:
+                        alert.expires,
+
+                    affectsCurrentLocation:
+                        alert.affectsCurrentLocation ===
+                        true
+                });
         }
-    )[0];
+    });
+
+    const highestAlert =
+        [...alerts].sort(
+            function (
+                alertA,
+                alertB
+            ) {
+                const scoreA =
+                    Number.isFinite(
+                        alertA.relevanceScore
+                    )
+                        ? alertA.relevanceScore
+                        : 0;
+
+                const scoreB =
+                    Number.isFinite(
+                        alertB.relevanceScore
+                    )
+                        ? alertB.relevanceScore
+                        : 0;
+
+                /*
+                 * Highest relevance score wins.
+                 */
+                if (scoreB !== scoreA) {
+                    return scoreB - scoreA;
+                }
+
+                const priorityA =
+                    alertA.priority ||
+                    alertA.severity ||
+                    "low";
+
+                const priorityB =
+                    alertB.priority ||
+                    alertB.severity ||
+                    "low";
+
+                const priorityDifference =
+                    (
+                        priorityOrder[
+                            priorityB
+                        ] || 0
+                    ) -
+                    (
+                        priorityOrder[
+                            priorityA
+                        ] || 0
+                    );
+
+                /*
+                 * Priority is the first
+                 * tie-breaker.
+                 */
+                if (
+                    priorityDifference !== 0
+                ) {
+                    return priorityDifference;
+                }
+
+                const distanceA =
+                    Number.isFinite(
+                        alertA.distance
+                    )
+                        ? alertA.distance
+                        : Infinity;
+
+                const distanceB =
+                    Number.isFinite(
+                        alertB.distance
+                    )
+                        ? alertB.distance
+                        : Infinity;
+
+                /*
+                 * The nearest alert wins the
+                 * final tie.
+                 */
+                return (
+                    distanceA -
+                    distanceB
+                );
+            }
+        )[0];
 
     const alertPriority =
         highestAlert.priority ||
@@ -1095,31 +1272,64 @@ function updateAlertsPanel() {
 
     switch (alertPriority) {
         case "critical":
-            alertsPanel.classList.add("alert-critical");
-            alertsHeading.classList.add("alert-critical");
-            alertsStatus.classList.add("alert-critical");
+            alertsPanel.classList.add(
+                "alert-critical"
+            );
+
+            alertsHeading.classList.add(
+                "alert-critical"
+            );
+
+            alertsStatus.classList.add(
+                "alert-critical"
+            );
             break;
 
         case "high":
-            alertsPanel.classList.add("alert-high");
-            alertsHeading.classList.add("alert-high");
-            alertsStatus.classList.add("alert-high");
+            alertsPanel.classList.add(
+                "alert-high"
+            );
+
+            alertsHeading.classList.add(
+                "alert-high"
+            );
+
+            alertsStatus.classList.add(
+                "alert-high"
+            );
             break;
 
         case "medium":
-            alertsPanel.classList.add("alert-medium");
-            alertsHeading.classList.add("alert-medium");
-            alertsStatus.classList.add("alert-medium");
+            alertsPanel.classList.add(
+                "alert-medium"
+            );
+
+            alertsHeading.classList.add(
+                "alert-medium"
+            );
+
+            alertsStatus.classList.add(
+                "alert-medium"
+            );
             break;
 
         default:
-            alertsPanel.classList.add("alert-clear");
-            alertsHeading.classList.add("alert-clear");
-            alertsStatus.classList.add("alert-clear");
+            alertsPanel.classList.add(
+                "alert-clear"
+            );
+
+            alertsHeading.classList.add(
+                "alert-clear"
+            );
+
+            alertsStatus.classList.add(
+                "alert-clear"
+            );
     }
 
     const alertIcon =
-        highestAlert.icon || "🚨";
+        highestAlert.icon ||
+        "🚨";
 
     const alertTitle =
         highestAlert.title ||
@@ -1128,18 +1338,56 @@ function updateAlertsPanel() {
 
     let alertDetails = "";
 
-    if (typeof highestAlert.distance === "number") {
+    if (
+        highestAlert
+            .affectsCurrentLocation === true
+    ) {
         alertDetails +=
-            ` — ${highestAlert.distance.toFixed(1)} miles`;
-    }
+            " — Current Location";
+    } else {
+        if (
+            typeof highestAlert.distance ===
+            "number"
+        ) {
+            alertDetails +=
+                ` — ${highestAlert.distance.toFixed(
+                    1
+                )} miles`;
+        }
 
-    if (highestAlert.direction) {
-        alertDetails +=
-            ` ${highestAlert.direction}`;
+        if (highestAlert.direction) {
+            alertDetails +=
+                ` ${highestAlert.direction}`;
+        }
     }
 
     alertsStatus.textContent =
         `${alertIcon} ${alertTitle}${alertDetails}`;
+
+    console.log(
+        "[Sentinel] Highest-ranked alert:",
+        {
+            title:
+                alertTitle,
+
+            priority:
+                alertPriority,
+
+            relevanceScore:
+                highestAlert
+                    .relevanceScore,
+
+            distance:
+                highestAlert.distance,
+
+            direction:
+                highestAlert.direction,
+
+            affectsCurrentLocation:
+                highestAlert
+                    .affectsCurrentLocation
+        }
+    );
 }
 
 // =============================
@@ -2504,6 +2752,145 @@ function addTestLightningStrike() {
 // NWS Warnings
 // ===================================
 
+const NWS_ALERT_PRIORITY_RULES = {
+    critical: [
+        "tornado emergency",
+        "tornado warning",
+        "flash flood emergency",
+        "extreme wind warning",
+        "hurricane warning",
+        "storm surge warning",
+        "tsunami warning",
+        "civil danger warning",
+        "nuclear power plant warning",
+        "radiological hazard warning",
+        "hazardous materials warning",
+        "evacuation immediate",
+        "shelter in place warning"
+    ],
+
+    high: [
+        "severe thunderstorm warning",
+        "flash flood warning",
+        "flood warning",
+        "coastal flood warning",
+        "lakeshore flood warning",
+        "excessive heat warning",
+        "extreme heat warning",
+        "tropical storm warning",
+        "typhoon warning",
+        "blizzard warning",
+        "ice storm warning",
+        "winter storm warning",
+        "snow squall warning",
+        "dust storm warning",
+        "high wind warning",
+        "red flag warning",
+        "fire warning",
+        "special marine warning",
+        "avalanche warning",
+        "volcano warning",
+        "law enforcement warning",
+        "local area emergency",
+        "911 telephone outage emergency"
+    ],
+
+    medium: [
+        // Heat
+        "heat advisory",
+        "excessive heat watch",
+        "extreme heat watch",
+
+        // Severe weather watches
+        "tornado watch",
+        "severe thunderstorm watch",
+        "flash flood watch",
+        "flood watch",
+        "hurricane watch",
+        "tropical storm watch",
+        "storm surge watch",
+        "typhoon watch",
+
+        // Winter weather
+        "winter storm watch",
+        "winter weather advisory",
+        "freeze warning",
+        "freeze watch",
+        "frost advisory",
+        "cold weather advisory",
+        "extreme cold warning",
+        "extreme cold watch",
+        "wind chill warning",
+        "wind chill watch",
+        "wind chill advisory",
+        "freezing rain advisory",
+        "freezing fog advisory",
+
+        // Wind and visibility
+        "high wind watch",
+        "wind advisory",
+        "lake wind advisory",
+        "dense fog advisory",
+        "dense smoke advisory",
+        "dust advisory",
+        "ashfall advisory",
+
+        // Flooding, coastal and beach
+        "flood advisory",
+        "urban and small stream flood advisory",
+        "small stream flood advisory",
+        "coastal flood advisory",
+        "lakeshore flood advisory",
+        "lakeshore flood watch",
+        "high surf warning",
+        "high surf advisory",
+        "rip current statement",
+        "beach hazards statement",
+
+        // Fire and air quality
+        "fire weather watch",
+        "air quality alert",
+        "air stagnation advisory",
+
+        // Marine
+        "small craft advisory",
+        "hazardous seas warning",
+        "hazardous seas watch",
+        "gale warning",
+        "gale watch",
+        "storm warning",
+        "storm watch",
+        "hurricane force wind warning",
+        "hurricane force wind watch",
+        "heavy freezing spray warning",
+        "heavy freezing spray watch",
+        "low water advisory",
+        "brisk wind advisory",
+        "marine weather statement",
+
+        // Avalanche
+        "avalanche watch",
+        "avalanche advisory"
+    ],
+
+    low: [
+        "special weather statement",
+        "significant weather advisory",
+        "hazardous weather outlook",
+        "hydrologic outlook",
+        "short term forecast",
+        "administrative message",
+        "test message"
+    ]
+};
+
+function normalizeNwsEventName(eventName) {
+    return String(eventName || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ");
+}
+
 function initializeWarnings() {
     if (warningsLayer) {
         return;
@@ -2532,7 +2919,134 @@ function initializeWarnings() {
     );
 }
 
-async function loadNwsWarnings () {
+function getNwsZoneId(zoneUrl) {
+    if (!zoneUrl) {
+        return null;
+    }
+
+    const urlParts =
+        String(zoneUrl)
+            .split("/")
+            .filter(Boolean);
+
+    return (
+        urlParts[urlParts.length - 1] ||
+        null
+    );
+}
+
+function getNwsZoneType(zoneUrl) {
+    if (!zoneUrl) {
+        return "zone";
+    }
+
+    const urlParts =
+        String(zoneUrl)
+            .split("/")
+            .filter(Boolean);
+
+    const zonesIndex =
+        urlParts.indexOf("zones");
+
+    if (
+        zonesIndex !== -1 &&
+        urlParts[zonesIndex + 1]
+    ) {
+        return urlParts[zonesIndex + 1];
+    }
+
+    return "zone";
+}
+
+async function fetchNwsZoneGeometry(zoneUrl) {
+    if (!zoneUrl) {
+        return null;
+    }
+
+    if (
+        nwsZoneGeometryCache.has(zoneUrl)
+    ) {
+        return nwsZoneGeometryCache.get(
+            zoneUrl
+        );
+    }
+
+    if (
+        nwsZoneRequestCache.has(zoneUrl)
+    ) {
+        return nwsZoneRequestCache.get(
+            zoneUrl
+        );
+    }
+
+    const zoneRequest =
+        (async function () {
+            try {
+                console.log(
+                    "[Sentinel] Fetching NWS zone:",
+                    zoneUrl
+                );
+
+                const response =
+                    await fetch(
+                        zoneUrl,
+                        {
+                            headers: {
+                                Accept:
+                                    "application/geo+json"
+                            },
+                            cache: "force-cache"
+                        }
+                    );
+
+                if (!response.ok) {
+                    throw new Error(
+                        `NWS zone request failed: ${response.status}`
+                    );
+                }
+
+                const zoneData =
+                    await response.json();
+
+                if (!zoneData.geometry) {
+                    console.warn(
+                        "[Sentinel] Zone has no geometry:",
+                        zoneUrl
+                    );
+
+                    return null;
+                }
+
+                nwsZoneGeometryCache.set(
+                    zoneUrl,
+                    zoneData
+                );
+
+                return zoneData;
+            } catch (error) {
+                console.error(
+                    "[Sentinel] Unable to load zone geometry:",
+                    zoneUrl,
+                    error
+                );
+
+                return null;
+            } finally {
+                nwsZoneRequestCache.delete(
+                    zoneUrl
+                );
+            }
+        })();
+
+    nwsZoneRequestCache.set(
+        zoneUrl,
+        zoneRequest
+    );
+
+    return zoneRequest;
+}
+
+async function loadNwsWarnings() {
     if (
         currentLatitude === null ||
         currentLongitude === null
@@ -2545,192 +3059,526 @@ async function loadNwsWarnings () {
     }
 
     const warningsUrl =
-        "https://api.weather.gov/alerts/active";
+        "https://api.weather.gov/alerts/active" +
+        `?point=${currentLatitude},${currentLongitude}`;
 
-        console.log("NWS warning URL:", warningsUrl);
+    console.log(
+        "NWS warning URL:",
+        warningsUrl
+    );
 
-        try {
-            const response = await fetch(warningsUrl, {
-                headers: {
-                    Accept: "application/geo+json"
+    try {
+        const response =
+            await fetch(
+                warningsUrl,
+                {
+                    headers: {
+                        Accept:
+                            "application/geo+json"
+                    },
+                    cache: "no-store"
                 }
-            });
+            );
 
-            if (!response.ok) {
-                throw new Error(
-                    `NWS request failed: ${response.status}`
+        if (!response.ok) {
+            throw new Error(
+                `NWS request failed: ${response.status}`
+            );
+        }
+
+        const warningData =
+            await response.json();
+
+        const features =
+            Array.isArray(
+                warningData.features
+            )
+                ? warningData.features
+                : [];
+
+        warningsLayer.clearLayers();
+
+        notificationManager.beginRefresh(
+            "NWS"
+        );
+
+        let activeAlertCount = 0;
+        let directPolygonCount = 0;
+        let zoneBasedAlertCount = 0;
+        let zonePolygonCount = 0;
+
+        /*
+         * Use a for...of loop because fetching
+         * missing zone geometry is asynchronous.
+         */
+        for (const feature of features) {
+            const properties =
+                feature.properties || {};
+
+            const eventName =
+                properties.event ||
+                "Weather Alert";
+
+            const priority =
+                getAlertPriority(
+                    eventName,
+                    properties
+                );
+
+            const icon =
+                getNwsAlertIcon(
+                    eventName
+                );
+
+            properties.priority =
+                priority;
+
+            properties.distanceMiles = 0;
+            properties.direction =
+                "Current Location";
+
+            const relevanceScore =
+    calculateSentinelRelevanceScore({
+        priority,
+
+        severity:
+            properties.severity,
+
+        urgency:
+            properties.urgency,
+
+        certainty:
+            properties.certainty,
+
+        distanceMiles: 0,
+
+        direction:
+            "Current Location",
+
+        expires:
+            properties.expires,
+
+        affectsCurrentLocation: true
+    });
+
+notificationManager.addAlert({
+    id:
+        feature.id ||
+        properties.id ||
+        [
+            "nws",
+            eventName,
+            properties.sent,
+            properties.areaDesc
+        ].join("-"),
+
+    source: "NWS",
+    createdBy: "Sentinel",
+
+    title: eventName,
+    priority,
+
+    capSeverity:
+        properties.severity,
+
+    urgency:
+        properties.urgency,
+
+    certainty:
+        properties.certainty,
+
+    distance: 0,
+
+    direction:
+        "Current Location",
+
+    affectsCurrentLocation: true,
+
+    expires:
+        properties.expires,
+
+    relevanceScore,
+
+    icon
+});
+
+            activeAlertCount++;
+
+            /*
+             * Draw the alert's own polygon when
+             * one is included in the response.
+             */
+            if (feature.geometry) {
+                const alertLayer =
+                    L.geoJSON(
+                        feature,
+                        {
+                            style: function () {
+                                return getWarningStyle(
+                                    eventName,
+                                    properties
+                                );
+                            },
+
+                            onEachFeature:
+                                function (
+                                    mappedFeature,
+                                    layer
+                                ) {
+                                    layer.bindPopup(`
+                                        <strong>
+                                            ${icon} ${eventName}
+                                        </strong>
+                                        <br>
+
+                                        ${
+                                            properties.headline ||
+                                            ""
+                                        }
+                                        <br><br>
+
+                                        <strong>Area:</strong>
+                                        ${
+                                            properties.areaDesc ||
+                                            "Unknown"
+                                        }
+                                        <br>
+
+                                        <strong>Coverage:</strong>
+                                        Alert Polygon
+                                        <br>
+
+                                        <strong>Severity:</strong>
+                                        ${
+                                            properties.severity ||
+                                            "Unknown"
+                                        }
+                                        <br>
+
+                                        <strong>Urgency:</strong>
+                                        ${
+                                            properties.urgency ||
+                                            "Unknown"
+                                        }
+                                        <br>
+
+                                        <strong>Expires:</strong>
+                                        ${
+                                            formatAlertTime(
+                                                properties.expires
+                                            )
+                                        }
+                                    `);
+                                }
+                        }
+                    );
+
+                alertLayer.addTo(
+                    warningsLayer
+                );
+
+                directPolygonCount++;
+            } else {
+                /*
+                 * Zone-based advisories often
+                 * omit embedded geometry.
+                 */
+                zoneBasedAlertCount++;
+
+                const affectedZones =
+                    Array.isArray(
+                        properties.affectedZones
+                    )
+                        ? properties.affectedZones
+                        : [];
+
+                const zoneResults =
+                    await Promise.all(
+                        affectedZones.map(
+                            fetchNwsZoneGeometry
+                        )
+                    );
+
+                zoneResults.forEach(
+                    (zoneData, index) => {
+                        if (
+                            !zoneData ||
+                            !zoneData.geometry
+                        ) {
+                            return;
+                        }
+
+                        const zoneUrl =
+                            affectedZones[index];
+
+                        const zoneId =
+                            getNwsZoneId(
+                                zoneUrl
+                            );
+
+                        const zoneName =
+                            zoneData.properties
+                                ?.name ||
+                            zoneId ||
+                            "Unknown Zone";
+
+                        const zoneFeature = {
+                            type: "Feature",
+
+                            properties:
+                                zoneData.properties ||
+                                {},
+
+                            geometry:
+                                zoneData.geometry
+                        };
+
+                        const zoneLayer =
+                            L.geoJSON(
+                                zoneFeature,
+                                {
+                                    style:
+                                        function () {
+                                            return getWarningStyle(
+                                                eventName,
+                                                properties
+                                            );
+                                        },
+
+                                    onEachFeature:
+                                        function (
+                                            mappedFeature,
+                                            layer
+                                        ) {
+                                            layer.bindPopup(`
+                                                <strong>
+                                                    ${icon} ${eventName}
+                                                </strong>
+                                                <br>
+
+                                                ${
+                                                    properties.headline ||
+                                                    ""
+                                                }
+                                                <br><br>
+
+                                                <strong>Area:</strong>
+                                                ${
+                                                    properties.areaDesc ||
+                                                    "Unknown"
+                                                }
+                                                <br>
+
+                                                <strong>Zone:</strong>
+                                                ${zoneName}
+                                                ${
+                                                    zoneId
+                                                        ? ` (${zoneId})`
+                                                        : ""
+                                                }
+                                                <br>
+
+                                                <strong>Severity:</strong>
+                                                ${
+                                                    properties.severity ||
+                                                    "Unknown"
+                                                }
+                                                <br>
+
+                                                <strong>Urgency:</strong>
+                                                ${
+                                                    properties.urgency ||
+                                                    "Unknown"
+                                                }
+                                                <br>
+
+                                                <strong>Expires:</strong>
+                                                ${
+                                                    formatAlertTime(
+                                                        properties.expires
+                                                    )
+                                                }
+                                            `);
+                                        }
+                                }
+                            );
+
+                        zoneLayer.addTo(
+                            warningsLayer
+                        );
+
+                        zonePolygonCount++;
+                    }
                 );
             }
 
-            const warningData = await response.json();
+            console.log(
+                "[Sentinel]",
+                {
+                    event:
+                        eventName,
 
-            warningsLayer.clearLayers();
-            notificationManager.beginRefresh("NWS");
+                    priority,
 
-            let nearbyAlertCount = 0;
+                    severity:
+                        properties.severity,
 
-            L.geoJSON(warningData, {
-                filter: function (feature) {
-                    if (feature.geometry === null) {
-                        return false;
-                    }
+                    urgency:
+                        properties.urgency,
 
-                    if (
-                        currentLatitude === null ||
-                        currentLongitude === null
-                    ) {
-                        return false;
-                    }
+                    directGeometry:
+                        Boolean(
+                            feature.geometry
+                        ),
 
-                    const featureLayer = L.geoJSON(feature);
+                    affectedZoneCount:
+                        Array.isArray(
+                            properties.affectedZones
+                        )
+                            ? properties
+                                .affectedZones
+                                .length
+                            : 0,
 
-                    const warningCenter = 
-                        featureLayer.getBounds().getCenter();
+                    area:
+                        properties.areaDesc,
 
-                    const warningDistanceMiles = 
-                        calculateDistanceMiles(
-                            currentLatitude,
-                            currentLongitude,
-                            warningCenter.lat,
-                            warningCenter.lng
-                        );
-
-                    const warningBearing = 
-                    calculateBearing(
-                        currentLatitude,
-                        currentLongitude,
-                        warningCenter.lat,
-                        warningCenter.lng
-                    );
-                    
-                    const warningDirection = 
-                        bearingToCompass(warningBearing);
-
-                        
-                    feature.properties.distanceMiles = 
-                        warningDistanceMiles;
-
-                    feature.properties.bearing = 
-                        warningBearing;
-                        
-                    feature.properties.direction =
-                        warningDirection;
-                        
-                    const isNearby =
-                        warningDistanceMiles <= SENTINEL_RADIUS_MILES;
-
-                    if (isNearby) {
-                        nearbyAlertCount++;
-                    }    
-                        
-                    return isNearby;
-
-                },
-
-                style: function (feature) {
-                    return getWarningStyle(
-                        feature.properties.event
-                    );
-                },
-
-                onEachFeature: function (feature, layer) {
-                    const properties = feature.properties;
-
-                    properties.priority = 
-                        getAlertPriority(properties.event);
-
-                    function getAlertIcon(priority) {
-                        if (priority === "critical") {
-                            return "🚨";
-                        }        
-                        
-                        if (priority === "high") {
-                            return "⚠️";
-                        }
-                        
-                        if (priority === "medium") {
-                            return "🟡";
-                        }
-
-                        return "🔵";
-                    }
-
-                    notificationManager.addAlert({
-                        id: feature.id,
-                        
-                        source: "NWS",
-                        createdBy: "Sentinel",
-
-                        title: properties.event,
-                        priority: properties.priority,
-                        distance: properties.distanceMiles,
-                        direction: properties.direction,
-                        expires: properties.expires,
-                        icon: getAlertIcon(properties.priority),
-
-                    });  
-
-                    console.log(
-                        "[Sentinel]",
-                        properties.event,
-                        properties.priority,
-                        `${properties.distanceMiles.toFixed(1)}`
-                    );
-
-                    layer.bindPopup(`
-                        <strong>${properties.event}</strong><br>
-                        ${properties.headline || ""}<br><br>
-                        <strong>Area:</strong>
-                        ${properties.areaDesc || "Unknown"}<br>
-                        <strong>Expires:</strong>
-                        ${formatAlertTime(properties.expires)}
-                    `);
+                    expires:
+                        properties.expires
                 }
-            }).addTo(warningsLayer);
-
-            notificationManager.endRefresh("NWS");
-
-            console.log(
-                `NWS alerts loaded: ${warningData.features.length}`
             );
-
-            console.log(
-                `Nearby alerts displayed: ${nearbyAlertCount}`
-            );
-
-            updateAlertsPanel();
-
-        } catch (error) {
-            console.error(
-                "Unable to load NWS warnings:",
-                error
-            );
-
-            updateAlertsPanel();
         }
+
+        notificationManager.endRefresh(
+            "NWS"
+        );
+
+        console.log(
+            "[Sentinel] NWS refresh complete:",
+            {
+                alertsReturned:
+                    features.length,
+
+                activeAlerts:
+                    activeAlertCount,
+
+                directAlertPolygons:
+                    directPolygonCount,
+
+                zoneBasedAlerts:
+                    zoneBasedAlertCount,
+
+                zonePolygonsDrawn:
+                    zonePolygonCount,
+
+                cachedZones:
+                    nwsZoneGeometryCache.size
+            }
+        );
+    } catch (error) {
+        console.error(
+            "Unable to load NWS warnings:",
+            error
+        );
+
+        notificationManager.addAlert({
+            id: "nws-refresh-error",
+            source: "NWS-System",
+            createdBy: "Sentinel",
+
+            title:
+                "NWS alert data unavailable",
+
+            priority: "low",
+            icon: "🔵"
+        });
+
+        updateAlertsPanel();
+    }
 }
 
-function getAlertPriority(eventName) {
-    const event = eventName.toLowerCase();
+function getAlertPriority(
+    eventName,
+    properties = {}
+) {
+    const event =
+        normalizeNwsEventName(
+            eventName
+        );
 
-    if (
-        event.includes("tornado warning") ||
-        event.includes("flash flood warning")
+    for (
+        const priority of [
+            "critical",
+            "high",
+            "medium",
+            "low"
+        ]
     ) {
+        const matchedRule =
+            NWS_ALERT_PRIORITY_RULES[
+                priority
+            ].some(rule => {
+                return event.includes(rule);
+            });
+
+        if (matchedRule) {
+            return priority;
+        }
+    }
+
+    /*
+     * Generic product-name fallbacks ensure
+     * newly introduced or uncommon NWS
+     * products are still classified.
+     */
+
+    if (event.includes("emergency")) {
         return "critical";
     }
 
-    if (
-        event.includes("severe thunderstorm warning") ||
-        event.includes("hurricane warning") ||
-        event.includes("tropical storm warning")
-    ) {
+    if (event.includes("warning")) {
         return "high";
     }
 
     if (
         event.includes("watch") ||
-        event.includes("advisory")
+        event.includes("advisory") ||
+        event.includes("statement") ||
+        event.includes("outlook") ||
+        event.includes("alert")
+    ) {
+        return "medium";
+    }
+
+    /*
+     * CAP metadata fallback for event names
+     * that Sentinel does not yet recognize.
+     */
+
+    const severity =
+        String(
+            properties.severity || ""
+        ).toLowerCase();
+
+    const urgency =
+        String(
+            properties.urgency || ""
+        ).toLowerCase();
+
+    if (
+        severity === "extreme" ||
+        urgency === "immediate"
+    ) {
+        return "critical";
+    }
+
+    if (severity === "severe") {
+        return "high";
+    }
+
+    if (
+        severity === "moderate" ||
+        urgency === "expected"
     ) {
         return "medium";
     }
@@ -2738,43 +3586,431 @@ function getAlertPriority(eventName) {
     return "low";
 }
 
-function getWarningStyle(eventName) {
-    const event = eventName.toLowerCase();
+function normalizeSentinelMetadataValue(
+    value
+) {
+    const normalized =
+        String(value || "")
+            .trim()
+            .toLowerCase();
 
-    let borderColor = "#ffd700";
-    let fillColor = "#ffd700";
+    return normalized || "unknown";
+}
 
-    if (event.includes("tornado warning")) {
+function getAlertExpirationScore(
+    expires
+) {
+    if (!expires) {
+        return 0;
+    }
+
+    const expirationTime =
+        new Date(expires).getTime();
+
+    if (
+        !Number.isFinite(
+            expirationTime
+        )
+    ) {
+        return 0;
+    }
+
+    const remainingMs =
+        expirationTime -
+        Date.now();
+
+    if (remainingMs <= 0) {
+        return -500;
+    }
+
+    const remainingMinutes =
+        remainingMs /
+        (60 * 1000);
+
+    /*
+     * Active alerts nearing expiration receive
+     * a modest urgency boost. Long-duration
+     * products receive only a small bonus.
+     */
+    if (remainingMinutes <= 30) {
+        return SENTINEL_RELEVANCE_WEIGHTS
+            .expiringSoon;
+    }
+
+    if (remainingMinutes <= 120) {
+        return 30;
+    }
+
+    if (remainingMinutes >= 720) {
+        return SENTINEL_RELEVANCE_WEIGHTS
+            .longDuration;
+    }
+
+    return 0;
+}
+
+function getAlertDistanceScore(
+    distanceMiles
+) {
+    const distance =
+        Number(distanceMiles);
+
+    if (!Number.isFinite(distance)) {
+        return 0;
+    }
+
+    if (distance <= 0) {
+        return SENTINEL_RELEVANCE_WEIGHTS
+            .currentLocation;
+    }
+
+    if (distance <= 10) {
+        return 250;
+    }
+
+    if (distance <= 25) {
+        return 200;
+    }
+
+    if (distance <= 50) {
+        return 140;
+    }
+
+    if (distance <= 100) {
+        return 80;
+    }
+
+    if (distance <= 150) {
+        return 40;
+    }
+
+    if (
+        distance <=
+        SENTINEL_RADIUS_MILES
+    ) {
+        return 10;
+    }
+
+    return -100;
+}
+
+function getAlertDirectionScore(
+    direction
+) {
+    const normalizedDirection =
+        String(direction || "")
+            .trim()
+            .toLowerCase();
+
+    if (
+        normalizedDirection ===
+        "current location"
+    ) {
+        return SENTINEL_RELEVANCE_WEIGHTS
+            .currentLocation;
+    }
+
+    if (
+        normalizedDirection.includes(
+            "ahead"
+        )
+    ) {
+        return SENTINEL_RELEVANCE_WEIGHTS
+            .aheadOfTravel;
+    }
+
+    if (
+        normalizedDirection.includes(
+            "left"
+        ) ||
+        normalizedDirection.includes(
+            "right"
+        )
+    ) {
+        return SENTINEL_RELEVANCE_WEIGHTS
+            .nearRoute;
+    }
+
+    if (
+        normalizedDirection.includes(
+            "behind"
+        )
+    ) {
+        return SENTINEL_RELEVANCE_WEIGHTS
+            .behindTravel;
+    }
+
+    return 0;
+}
+
+function calculateSentinelRelevanceScore({
+    priority = "low",
+    severity,
+    urgency,
+    certainty,
+    distanceMiles,
+    direction,
+    expires,
+    affectsCurrentLocation = false
+}) {
+    const normalizedPriority =
+        String(priority || "low")
+            .toLowerCase();
+
+    const normalizedSeverity =
+        normalizeSentinelMetadataValue(
+            severity
+        );
+
+    const normalizedUrgency =
+        normalizeSentinelMetadataValue(
+            urgency
+        );
+
+    const normalizedCertainty =
+        normalizeSentinelMetadataValue(
+            certainty
+        );
+
+    let score =
+        SENTINEL_RELEVANCE_WEIGHTS
+            .basePriority[
+                normalizedPriority
+            ] || 0;
+
+    score +=
+        SENTINEL_RELEVANCE_WEIGHTS
+            .severity[
+                normalizedSeverity
+            ] || 0;
+
+    score +=
+        SENTINEL_RELEVANCE_WEIGHTS
+            .urgency[
+                normalizedUrgency
+            ] || 0;
+
+    score +=
+        SENTINEL_RELEVANCE_WEIGHTS
+            .certainty[
+                normalizedCertainty
+            ] || 0;
+
+    score += getAlertDistanceScore(
+        distanceMiles
+    );
+
+    score += getAlertDirectionScore(
+        direction
+    );
+
+    score += getAlertExpirationScore(
+        expires
+    );
+
+    if (affectsCurrentLocation) {
+        score +=
+            SENTINEL_RELEVANCE_WEIGHTS
+                .currentLocation;
+    }
+
+    return Math.round(score);
+}
+
+function getNwsAlertIcon(eventName) {
+    const event =
+        normalizeNwsEventName(
+            eventName
+        );
+
+    if (event.includes("tornado")) {
+        return "🌪️";
+    }
+
+    if (
+        event.includes("hurricane") ||
+        event.includes("tropical storm") ||
+        event.includes("typhoon") ||
+        event.includes("storm surge")
+    ) {
+        return "🌀";
+    }
+
+    if (
+        event.includes("thunderstorm") ||
+        event.includes("lightning")
+    ) {
+        return "⛈️";
+    }
+
+    if (
+        event.includes("flash flood") ||
+        event.includes("flood") ||
+        event.includes("high surf") ||
+        event.includes("rip current") ||
+        event.includes("beach hazards")
+    ) {
+        return "🌊";
+    }
+
+    if (
+        event.includes("heat") ||
+        event.includes("hot")
+    ) {
+        return "🌡️";
+    }
+
+    if (
+        event.includes("winter") ||
+        event.includes("snow") ||
+        event.includes("blizzard") ||
+        event.includes("ice") ||
+        event.includes("freeze") ||
+        event.includes("frost") ||
+        event.includes("cold") ||
+        event.includes("wind chill")
+    ) {
+        return "❄️";
+    }
+
+    if (
+        event.includes("wind") ||
+        event.includes("gale")
+    ) {
+        return "💨";
+    }
+
+    if (
+        event.includes("fire") ||
+        event.includes("red flag") ||
+        event.includes("smoke")
+    ) {
+        return "🔥";
+    }
+
+    if (
+        event.includes("fog") ||
+        event.includes("air quality") ||
+        event.includes("air stagnation")
+    ) {
+        return "🌫️";
+    }
+
+    if (
+        event.includes("marine") ||
+        event.includes("small craft") ||
+        event.includes("hazardous seas") ||
+        event.includes("freezing spray")
+    ) {
+        return "⚓";
+    }
+
+    if (
+        event.includes("dust") ||
+        event.includes("ashfall")
+    ) {
+        return "🏜️";
+    }
+
+    if (
+        event.includes("avalanche")
+    ) {
+        return "🏔️";
+    }
+
+    return "⚠️";
+}
+
+function getWarningStyle(
+    eventName,
+    properties = {}
+) {
+    const event =
+        normalizeNwsEventName(
+            eventName
+        );
+
+    const priority =
+        getAlertPriority(
+            eventName,
+            properties
+        );
+
+    let borderColor;
+    let fillColor;
+
+    switch (priority) {
+        case "critical":
+            borderColor = "#ff3030";
+            fillColor = "#ff3030";
+            break;
+
+        case "high":
+            borderColor = "#ff9800";
+            fillColor = "#ff9800";
+            break;
+
+        case "medium":
+            borderColor = "#ffd400";
+            fillColor = "#ffd400";
+            break;
+
+        default:
+            borderColor =
+                DEFAULT_SYSTEM_ACCENT;
+
+            fillColor =
+                DEFAULT_SYSTEM_ACCENT;
+    }
+
+    /*
+     * Preserve familiar hazard colors for
+     * several major weather families.
+     */
+
+    if (event.includes("tornado")) {
         borderColor = "#ff0000";
         fillColor = "#ff0000";
     } else if (
-        event.includes("tropical storm warning") ||
-        event.includes("hurricane warning")
+        event.includes("hurricane") ||
+        event.includes("tropical storm") ||
+        event.includes("storm surge")
     ) {
         borderColor = "#ff00ff";
         fillColor = "#ff00ff";
     } else if (
-        event.includes("severe thunderstorm warning")
-    ) {
-        borderColor = "#ff8c00";
-        fillColor = "#ff8c00";
-    } else if (
-        event.includes("flash flood warning")
+        event.includes("flash flood")
     ) {
         borderColor = "#00ff00";
         fillColor = "#00ff00";
-
-    } else if (event.includes("watch")) {
-        borderColor = "#ffff00";
-        fillColor = "#ffff00";
+    } else if (
+        event.includes("heat")
+    ) {
+        borderColor = "#ff5a1f";
+        fillColor = "#ff5a1f";
+    } else if (
+        event.includes("winter") ||
+        event.includes("snow") ||
+        event.includes("ice") ||
+        event.includes("freeze") ||
+        event.includes("cold")
+    ) {
+        borderColor = "#55cfff";
+        fillColor = "#55cfff";
     }
 
     return {
         color: borderColor,
-        weight: 3,
+        weight:
+            priority === "critical"
+                ? 4
+                : 3,
         opacity: 0.95,
-        fillColor: fillColor,
-        fillOpacity: 0.35
+        fillColor,
+        fillOpacity:
+            priority === "low"
+                ? 0.18
+                : 0.35
     };
 }
 
@@ -2783,7 +4019,18 @@ function formatAlertTime(timeString) {
         return "Unknown";
     }
 
-    return new Date(timeString).toLocaleString();
+    const alertTime =
+        new Date(timeString);
+
+    if (
+        Number.isNaN(
+            alertTime.getTime()
+        )
+    ) {
+        return "Unknown";
+    }
+
+    return alertTime.toLocaleString();
 }
 
 
