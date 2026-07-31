@@ -40,3 +40,13 @@ Fixed
 PS Status, Accuracy, Zoom
 
 Stable
+
+Project Overwatch Version 0.4.6
+
+“Sentinel Intelligence Foundation”
+
+* Added support for rendering zone-based NWS alerts (including Heat Advisories and other geometry-less products).
+* Added cached NWS zone geometry retrieval.
+* Restored full-frame alert flash notifications.
+* Introduced Sentinel relevance scoring and intelligent alert ranking.
+* Improved alert selection logic using relevance, priority, and distance.
