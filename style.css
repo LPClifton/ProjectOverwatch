@@ -294,7 +294,7 @@ body.map-open {
 
 #map-panel.fullscreen-map #map-controls {
     position: absolute;
-    bottom: 20px;
+    bottom: 76px;
     left: 50%;
     transform: translateX(-50%);
 
@@ -317,8 +317,29 @@ body.map-open {
     align-items: center;
     justify-content: center;
     gap: 10px;
-
+    flex-wrap: wrap;
+    
     margin-top: 8px;
+}
+
+#radar-controls,
+#map-utility-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+#radar-controls {
+    transition:
+        opacity 0.25s ease,
+        visibility 0.25s ease;
+}
+
+#radar-controls.radar-controls-hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
 }
 
 #map-controls button {
@@ -358,6 +379,7 @@ body.map-open {
 #map-controls button:active {
     transform: scale(0.92);
 }
+
 
 #radar-timestamp {
     position: static;
@@ -690,18 +712,25 @@ body.map-open {
         flex-wrap: wrap;
     }
 
+    #radar-controls,
+    #map-utility-controls {
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    #radar-controls {
+        width: 100%;
+    }
+
     #map-controls button {
         width: 40px;
         height: 40px;
     }
 
     #radar-timestamp {
-        width: 100%;
         box-sizing: border-box;
         text-align: center;
-        order: -1;
     }
-
     #system-footer {
         grid-template-columns: 1fr auto;
         gap: 4px 10px;

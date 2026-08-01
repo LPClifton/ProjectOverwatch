@@ -70,51 +70,74 @@
 
             <div class="map-container">
                 <div id="map"></div>
-
-                <p id="map-status">Initializing map...</p>
+                
+                <p id="map-status">
+                    Initializing map...
+                </p>
 
                 <div id="map-controls">
-                    <span id="radar-timestamp">Loading...</span>
 
-                    <span id="radar-freshness">
-                        Checking radar...
-                    </span>
+                    <div id="radar-controls">
+                        <span id="radar-timestamp">
+                            Loading...
+                        </span>
 
-                    <span id="map-zoom-level">Z--</span>
+                        <span id="radar-freshness">
+                            Checking radar...
+                        </span>
 
-                    <button id="radar-prev" type="button" aria-label="Previous radar frame">
-                        ⏮️
-                    </button>
+                        <button
+                            id="radar-prev"
+                            type="button"
+                            aria-label="Previous radar frame"
+                        >
+                            ⏮️
+                        </button>
 
-                    <button
-                        id="radar-play"
-                        type="button"
-                        aria-label="Pause radar animation"
-                    >
-                        ⏸️
-                    </button>
+                        <button
+                            id="radar-play"
+                            type="button"
+                            aria-label="Pause radar animation"
+                        >
+                            ⏸️
+                        </button>
 
-                    <button id="radar-next" type="button" aria-label="Next radar frame">
-                        ⏭️
-                    </button>
+                        <button
+                            id="radar-next"
+                            type="button"
+                            aria-label="Next radar frame"
+                        >
+                            ⏭️
+                        </button>
+                    </div>
 
-                    <button
-                        id="expand-map-btn"
-                        type="button"
-                        aria-label="Expand map"
-                        title="Expand map"
-                    >
-                        <span class="fullscreen-icon">⛶</span>
-                    </button>
+                    <div id="map-utility-controls">
+                        <span id="map-zoom-level">
+                            Z--
+                        </span>
 
-                    <button
-                        id="export-log-btn"
-                        aria-label="Export Diagnostics"
-                        title="Export Diagnostics">
-                        📝
-                    </button>
+                        <button
+                            id="expand-map-btn"
+                            type="button"
+                            aria-label="Expand map"
+                            title="Expand map"
+                        >
+                        <span class="fullscreen-icon">
+                            ⛶
+                        </span>
+                        </button>
+
+                        <button
+                            id="export-log-btn"
+                            type="button"
+                            aria-label="Export diagnostics"
+                            title="Export diagnostics"
+                        >
+                            📝
+                        </button>
+                    </div>
+
                 </div>
-         </div>
         </section>
 
         <section class="panel">
@@ -138,7 +161,7 @@
     <span id="version-status">Project Overwatch v0.4.6</span>
 
     <span id="build-date">
-        Build: 2026-07-30
+        Build: 2026-08-01
     </span>
 
     <span id="system-status">
@@ -166,5 +189,5 @@
 
 </body>    
 </html>
-Version 0.4.6
+
 

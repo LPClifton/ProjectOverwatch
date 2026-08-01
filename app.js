@@ -193,6 +193,11 @@ function updateOperatingMode() {
 
     updateMovementIcon();
 
+    radarControlsVisibilityManager
+    .setOperatingMode(
+        operatingMode
+    );
+
     if (
         operatingMode ===
         OPERATING_MODES.PARKED
@@ -200,9 +205,9 @@ function updateOperatingMode() {
         applyParkedMapState();
     } else {
         updateNavigationDisplay();
-    }
+}
 
-    updateSystemStatus();
+updateSystemStatus();
 }
 
 // =============================
@@ -796,6 +801,99 @@ updateHeading(rawHeading, speedMph) {
     return this.smoothedHeading;
 }
 }
+
+// =============================
+// Radar Controls Visibility Manager
+// =============================
+
+const radarControlsVisibilityManager = {
+    hideDelayMs: 4000,
+    hideTimer: null,
+    isDriving: false,
+
+    getControls() {
+        return document.getElementById(
+            "radar-controls"
+        );
+    },
+
+    clearHideTimer() {
+        if (this.hideTimer === null) {
+            return;
+        }
+
+        clearTimeout(
+            this.hideTimer
+        );
+
+        this.hideTimer = null;
+    },
+
+    show() {
+        const radarControls =
+            this.getControls();
+
+        if (!radarControls) {
+            return;
+        }
+
+        radarControls.classList.remove(
+            "radar-controls-hidden"
+        );
+
+        this.clearHideTimer();
+    },
+
+    hide() {
+        const radarControls =
+            this.getControls();
+
+        if (!radarControls) {
+            return;
+        }
+
+        radarControls.classList.add(
+            "radar-controls-hidden"
+        );
+
+        this.clearHideTimer();
+    },
+
+    scheduleHide() {
+        this.clearHideTimer();
+
+        if (!this.isDriving) {
+            return;
+        }
+
+        this.hideTimer =
+            setTimeout(() => {
+                this.hide();
+            }, this.hideDelayMs);
+    },
+
+    setOperatingMode(mode) {
+        this.isDriving =
+            mode ===
+            OPERATING_MODES.DRIVING;
+
+        this.show();
+
+        if (this.isDriving) {
+            this.scheduleHide();
+        }
+    },
+
+    handleInteraction() {
+        if (!this.isDriving) {
+            return;
+        }
+
+        this.show();
+        this.scheduleHide();
+    }
+};
+
 
 // =============================
 // Map Marker Icons
@@ -1862,6 +1960,9 @@ function initializeMap() {
     });
 
     radarMap.on("click", function (event) {
+        radarControlsVisibilityManager
+            .handleInteraction();
+
         console.log("Map clicked:", event.latlng);
 
         const clickedLatitude = event.latlng.lat;
@@ -2584,62 +2685,155 @@ function updateRadarTimestamp(frame) {
 }
 
 function initializeRadarControls() {
+    const radarControls =
+        document.getElementById(
+            "radar-controls"
+        );
+
     const previousButton =
-        document.getElementById("radar-prev");
+        document.getElementById(
+            "radar-prev"
+        );
 
     const playButton =
-        document.getElementById("radar-play");
+        document.getElementById(
+            "radar-play"
+        );
 
     const nextButton =
-        document.getElementById("radar-next");
+        document.getElementById(
+            "radar-next"
+        );
 
-    previousButton.addEventListener("click", function () {
-        if (radarFrames.length === 0) {
-            return;
+    if (
+        !radarControls ||
+        !previousButton ||
+        !playButton ||
+        !nextButton
+    ) {
+        console.error(
+            "[Radar Controls] Required controls not found."
+        );
+
+        return;
+    }
+
+    /*
+     * Prevent taps on the radar controls from
+     * also triggering the map underneath.
+     */
+    L.DomEvent.disableClickPropagation(
+        radarControls
+    );
+
+    L.DomEvent.disableScrollPropagation(
+        radarControls
+    );
+
+    /*
+     * Touching the radar control group resets
+     * the four-second hide timer while driving.
+     */
+    radarControls.addEventListener(
+        "pointerdown",
+        function () {
+            radarControlsVisibilityManager
+                .handleInteraction();
         }
+    );
 
-        stopRadarAnimation();
+    previousButton.addEventListener(
+        "click",
+        function () {
+            if (
+                radarFrames.length === 0
+            ) {
+                return;
+            }
 
-        currentRadarFrame--;
+            radarControlsVisibilityManager
+                .handleInteraction();
 
-        if (currentRadarFrame < 0) {
-            currentRadarFrame = radarFrames.length - 1;
-        }
-
-        displayRadarFrame(currentRadarFrame);
-        playButton.textContent = "▶";
-    });
-
-    playButton.addEventListener("click", function () {
-        if (radarFrames.length === 0) {
-            return;
-        }
-
-        if (radarIsPlaying) {
             stopRadarAnimation();
-            playButton.textContent = "▶";
-        } else {
-            startRadarAnimation();
-            playButton.textContent = "⏸";
+
+            currentRadarFrame--;
+
+            if (currentRadarFrame < 0) {
+                currentRadarFrame =
+                    radarFrames.length - 1;
+            }
+
+            displayRadarFrame(
+                currentRadarFrame
+            );
+
+            playButton.textContent =
+                "▶";
         }
-    });
+    );
 
-    nextButton.addEventListener("click", function () {
-        if (radarFrames.length === 0) {
-            return;
+    playButton.addEventListener(
+        "click",
+        function () {
+            if (
+                radarFrames.length === 0
+            ) {
+                return;
+            }
+
+            radarControlsVisibilityManager
+                .handleInteraction();
+
+            if (radarIsPlaying) {
+                stopRadarAnimation();
+
+                playButton.textContent =
+                    "▶";
+            } else {
+                startRadarAnimation();
+
+                playButton.textContent =
+                    "⏸";
+            }
         }
+    );
 
-        stopRadarAnimation();
+    nextButton.addEventListener(
+        "click",
+        function () {
+            if (
+                radarFrames.length === 0
+            ) {
+                return;
+            }
 
-        currentRadarFrame++;
+            radarControlsVisibilityManager
+                .handleInteraction();
 
-        if (currentRadarFrame >= radarFrames.length) {
-            currentRadarFrame = 0;
+            stopRadarAnimation();
+
+            currentRadarFrame++;
+
+            if (
+                currentRadarFrame >=
+                radarFrames.length
+            ) {
+                currentRadarFrame = 0;
+            }
+
+            displayRadarFrame(
+                currentRadarFrame
+            );
+
+            playButton.textContent =
+                "▶";
         }
+    );
 
-        displayRadarFrame(currentRadarFrame);
-        playButton.textContent = "▶";
-    });
+    radarControlsVisibilityManager
+        .setOperatingMode(
+            operatingMode
+        );
 }
 
 function handleRadarZoomLimit() {
