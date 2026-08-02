@@ -210,6 +210,7 @@ function updateOperatingMode() {
 updateSystemStatus();
 }
 
+
 // =============================
 // Context Manager
 // =============================
@@ -813,7 +814,7 @@ const radarControlsVisibilityManager = {
 
     getControls() {
         return document.getElementById(
-            "radar-controls"
+            "map-controls"
         );
     },
 
@@ -838,7 +839,7 @@ const radarControlsVisibilityManager = {
         }
 
         radarControls.classList.remove(
-            "radar-controls-hidden"
+            "map-controls-hidden"
         );
 
         this.clearHideTimer();
@@ -853,7 +854,7 @@ const radarControlsVisibilityManager = {
         }
 
         radarControls.classList.add(
-            "radar-controls-hidden"
+            "map-controls-hidden"
         );
 
         this.clearHideTimer();
@@ -1830,6 +1831,8 @@ function requestWeatherLocation() {
         }
     );
 }
+
+
 
 // =============================
 // Sentinel Functions

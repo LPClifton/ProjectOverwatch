@@ -807,6 +807,20 @@ body.map-open {
     }
 }
 
+/* Hide all map controls while driving */
+.map-controls.controls-hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
+}
+
+/* Smooth reveal/hide */
+.map-controls {
+    transition:
+        opacity 0.2s ease,
+        transform 0.2s ease;
+}
+
 /* ================================
    Context Bar
 ================================ */
@@ -863,4 +877,27 @@ body.map-open {
 #context-bar.context-critical {
     border-color: #ef4444;
     box-shadow: 0 0 18px rgba(239,68,68,.45);
+}
+
+/* ==================================================
+   DRIVING MODE — HIDE ALL MAP CONTROLS
+   ================================================== */
+
+#map-controls {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+
+    transition:
+        opacity 200ms ease,
+        transform 200ms ease,
+        visibility 200ms ease;
+}
+
+#map-controls.map-controls-hidden {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    transform: translateY(10px) !important;
 }
