@@ -5037,6 +5037,14 @@ function zoomToGeometryFeatures(
         return;
     }
 
+    if (sentinelReturnTimer) {
+        clearTimeout(
+            sentinelReturnTimer
+        );
+
+        sentinelReturnTimer = null;
+    }
+
     if (
         accuracyCircle &&
         radarMap.hasLayer(
@@ -5048,12 +5056,16 @@ function zoomToGeometryFeatures(
         );
     }
 
-    if (sentinelReturnTimer) {
-        clearTimeout(
-            sentinelReturnTimer
+    const mapPanel =
+        document.getElementById(
+            "map-panel"
         );
 
-        sentinelReturnTimer = null;
+    if (mapPanel) {
+        mapPanel.scrollIntoView({
+            behavior: "smooth",
+            block: "center"
+        });
     }
 
     const geometryLayer =
@@ -5066,151 +5078,57 @@ function zoomToGeometryFeatures(
 
     if (!bounds.isValid()) {
         console.warn(
-            "[Sentinel] Unable to zoom: invalid alert bounds."
+            "[Sentinel] Invalid alert bounds."
         );
 
         return;
     }
 
-    const outboundSearchZoom =
-        Math.max(
-            MIN_MAP_ZOOM,
-            radarMap.getZoom() - 3
-        );
-
-    /*
-     * Outbound stage 1:
-     * Pull back from the current view.
-     */
-    radarMap.flyTo(
-        radarMap.getCenter(),
-        outboundSearchZoom,
-        {
-            animate: true,
-            duration: 0.7
-        }
-    );
-
-    /*
-     * Outbound stage 2:
-     * Fly to the selected alert.
-     */
     setTimeout(() => {
-        radarMap.flyToBounds(
-            bounds,
+
+        const currentZoom =
+            radarMap.getZoom();
+
+        const searchZoom =
+            Math.max(
+                MIN_MAP_ZOOM,
+                currentZoom - 3
+            );
+
+        radarMap.flyTo(
+            radarMap.getCenter(),
+            searchZoom,
             {
-                padding: [40, 40],
                 animate: true,
-                duration: 1.1,
-                maxZoom: 11
+                duration: 0.7
             }
         );
 
-        /*
-         * Hold on the alert, then begin
-         * the return sequence.
-         */
-        sentinelReturnTimer =
-            setTimeout(() => {
-                if (
-                    currentLatitude === null ||
-                    currentLongitude === null
-                ) {
-                    sentinelReturnTimer = null;
+        setTimeout(() => {
 
-                    return;
+            radarMap.flyToBounds(
+                bounds,
+                {
+                    padding: [40, 40],
+                    animate: true,
+                    duration: 1.1,
+                    maxZoom: 11
                 }
+            );
 
-                const returnSearchZoom =
-                    Math.max(
-                        MIN_MAP_ZOOM,
-                        radarMap.getZoom() - 3
-                    );
-
-                /*
-                 * Return stage 1:
-                 * Pull back from the alert.
-                 */
-                radarMap.flyTo(
-                    radarMap.getCenter(),
-                    returnSearchZoom,
-                    {
-                        animate: true,
-                        duration: 0.7
-                    }
-                );
-
-                /*
-                 * Return stage 2:
-                 * Fly back to the vehicle.
-                 */
+            sentinelReturnTimer =
                 setTimeout(() => {
-                    const returnZoom =
+
+                    if (
                         operatingMode ===
-                            OPERATING_MODES.DRIVING
-                            ? navigationIntelligenceManager
-                                .targetZoom
-                            : PARKED_MAP_ZOOM;
+                        OPERATING_MODES.DRIVING
+                    ) {
+                        updateNavigationDisplay();
+                    } else {
+                        applyParkedMapState();
+                    }
 
-                    radarMap.flyTo(
-                        [
-                            currentLatitude,
-                            currentLongitude
-                        ],
-                        returnZoom,
-                        {
-                            animate: true,
-                            duration: 1.1
-                        }
-                    );
-
-                    /*
-                     * After the return flight,
-                     * restore orientation only.
-                     *
-                     * Do not call setView() again.
-                     */
                     setTimeout(() => {
-                        if (
-                            operatingMode ===
-                            OPERATING_MODES.DRIVING
-                        ) {
-                            if (
-                                currentHeading !== null &&
-                                typeof radarMap.setBearing ===
-                                    "function"
-                            ) {
-                                const mapBearing =
-                                    convertHeadingToMapBearing(
-                                        currentHeading
-                                    );
-
-                                const visualMapBearing =
-                                    (
-                                        360 -
-                                        mapBearing
-                                    ) % 360;
-
-                                radarMap.setBearing(
-                                    visualMapBearing
-                                );
-                            }
-
-                            if (
-                                currentHeading !== null
-                            ) {
-                                applyMapLookAhead();
-                            }
-                        } else {
-                            if (
-                                typeof radarMap.setBearing ===
-                                    "function"
-                            ) {
-                                radarMap.setBearing(
-                                    0
-                                );
-                            }
-                        }
 
                         if (
                             accuracyCircle &&
@@ -5222,12 +5140,17 @@ function zoomToGeometryFeatures(
                                 radarMap
                             );
                         }
-                    }, 1150);
-                }, 750);
 
-                sentinelReturnTimer = null;
-            }, SENTINEL_ALERT_INSPECTION_MS);
-    }, 750);
+                    }, 1150);
+
+                    sentinelReturnTimer =
+                        null;
+
+                }, SENTINEL_ALERT_INSPECTION_MS);
+
+        }, 750);
+
+    }, 350);
 }
 
 function formatAlertTime(timeString) {

@@ -18,3 +18,32 @@ Version 0.5.0
 Sentinel is online
 Zoomable links from alerts panel
 Auto zoom to new alerts
+
+Project Overwatch
+Version 0.5.1
+
+Files Changed:
+- app.js
+
+Edits:
+1. Add one constant.
+2. Replace one function.
+3. No other changes.
+
+Expected Result:
+• Alert zoom now reverses smoothly back to the vehicle.
+
+Project Overwatch
+Version 0.5.1
+
+Files Changed:
+- app.js
+
+Edits:
+1. Add one constant.
+2. Replace one function.
+3. No other changes.
+
+Expected Result:
+• Alert zoom now reverses smoothly back to the vehicle.
+
