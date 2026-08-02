@@ -5045,29 +5045,6 @@ function zoomToGeometryFeatures(
         sentinelReturnTimer = null;
     }
 
-    if (
-        accuracyCircle &&
-        radarMap.hasLayer(
-            accuracyCircle
-        )
-    ) {
-        radarMap.removeLayer(
-            accuracyCircle
-        );
-    }
-
-    const mapPanel =
-        document.getElementById(
-            "map-panel"
-        );
-
-    if (mapPanel) {
-        mapPanel.scrollIntoView({
-            behavior: "smooth",
-            block: "center"
-        });
-    }
-
     const geometryLayer =
         L.geoJSON(
             geometryFeatures
@@ -5084,73 +5061,218 @@ function zoomToGeometryFeatures(
         return;
     }
 
-    setTimeout(() => {
+    const isMobilePortrait =
+        window.matchMedia(
+            "(max-width: 768px) and (orientation: portrait)"
+        ).matches;
 
-        const currentZoom =
-            radarMap.getZoom();
+    const mapPanelElement =
+        document.getElementById(
+            "map-panel"
+        );
 
-        const searchZoom =
+    if (
+        isMobilePortrait &&
+        mapPanelElement
+    ) {
+        mapPanelElement.scrollIntoView({
+            behavior: "smooth",
+            block: "center"
+        });
+    }
+
+    if (
+        accuracyCircle &&
+        radarMap.hasLayer(
+            accuracyCircle
+        )
+    ) {
+        radarMap.removeLayer(
+            accuracyCircle
+        );
+    }
+
+    function restoreAccuracyCircle() {
+        if (
+            accuracyCircle &&
+            !radarMap.hasLayer(
+                accuracyCircle
+            )
+        ) {
+            accuracyCircle.addTo(
+                radarMap
+            );
+        }
+    }
+
+    function restoreMapOrientation() {
+        if (
+            operatingMode ===
+            OPERATING_MODES.DRIVING
+        ) {
+            if (
+                currentHeading !== null &&
+                typeof radarMap.setBearing ===
+                    "function"
+            ) {
+                const mapBearing =
+                    convertHeadingToMapBearing(
+                        currentHeading
+                    );
+
+                const visualMapBearing =
+                    (
+                        360 -
+                        mapBearing
+                    ) % 360;
+
+                radarMap.setBearing(
+                    visualMapBearing
+                );
+            }
+
+            if (currentHeading !== null) {
+                applyMapLookAhead();
+            }
+        } else if (
+            typeof radarMap.setBearing ===
+            "function"
+        ) {
+            radarMap.setBearing(0);
+        }
+
+        restoreAccuracyCircle();
+    }
+
+    function flyBackToVehicle() {
+        if (
+            currentLatitude === null ||
+            currentLongitude === null
+        ) {
+            restoreAccuracyCircle();
+            return;
+        }
+
+        const returnZoom =
+            operatingMode ===
+                OPERATING_MODES.DRIVING
+                ? navigationIntelligenceManager
+                    .targetZoom
+                : PARKED_MAP_ZOOM;
+
+        radarMap.flyTo(
+            [
+                currentLatitude,
+                currentLongitude
+            ],
+            returnZoom,
+            {
+                animate: true,
+                duration:
+                    isMobilePortrait
+                        ? 0.8
+                        : 1.1
+            }
+        );
+
+        setTimeout(
+            restoreMapOrientation,
+            isMobilePortrait
+                ? 850
+                : 1150
+        );
+    }
+
+    function beginReturnSequence() {
+        if (isMobilePortrait) {
+            flyBackToVehicle();
+            return;
+        }
+
+        const returnSearchZoom =
             Math.max(
                 MIN_MAP_ZOOM,
-                currentZoom - 3
+                radarMap.getZoom() - 3
             );
 
         radarMap.flyTo(
             radarMap.getCenter(),
-            searchZoom,
+            returnSearchZoom,
             {
                 animate: true,
                 duration: 0.7
             }
         );
 
-        setTimeout(() => {
+        setTimeout(
+            flyBackToVehicle,
+            750
+        );
+    }
 
+    function inspectAlert() {
+        if (isMobilePortrait) {
             radarMap.flyToBounds(
                 bounds,
                 {
-                    padding: [40, 40],
+                    padding: [24, 24],
                     animate: true,
-                    duration: 1.1,
-                    maxZoom: 11
+                    duration: 0.8,
+                    maxZoom: 10
+                }
+            );
+        } else {
+            const searchZoom =
+                Math.max(
+                    MIN_MAP_ZOOM,
+                    radarMap.getZoom() - 3
+                );
+
+            radarMap.flyTo(
+                radarMap.getCenter(),
+                searchZoom,
+                {
+                    animate: true,
+                    duration: 0.7
                 }
             );
 
-            sentinelReturnTimer =
-                setTimeout(() => {
-
-                    if (
-                        operatingMode ===
-                        OPERATING_MODES.DRIVING
-                    ) {
-                        updateNavigationDisplay();
-                    } else {
-                        applyParkedMapState();
+            setTimeout(() => {
+                radarMap.flyToBounds(
+                    bounds,
+                    {
+                        padding: [40, 40],
+                        animate: true,
+                        duration: 1.1,
+                        maxZoom: 11
                     }
+                );
+            }, 750);
+        }
 
-                    setTimeout(() => {
+        const outboundDurationMs =
+            isMobilePortrait
+                ? 850
+                : 1900;
 
-                        if (
-                            accuracyCircle &&
-                            !radarMap.hasLayer(
-                                accuracyCircle
-                            )
-                        ) {
-                            accuracyCircle.addTo(
-                                radarMap
-                            );
-                        }
+        sentinelReturnTimer =
+            setTimeout(() => {
+                beginReturnSequence();
 
-                    }, 1150);
+                sentinelReturnTimer =
+                    null;
+            },
+            SENTINEL_ALERT_INSPECTION_MS +
+                outboundDurationMs
+        );
+    }
 
-                    sentinelReturnTimer =
-                        null;
-
-                }, SENTINEL_ALERT_INSPECTION_MS);
-
-        }, 750);
-
-    }, 350);
+    setTimeout(
+        inspectAlert,
+        isMobilePortrait
+            ? 450
+            : 0
+    );
 }
 
 function formatAlertTime(timeString) {
