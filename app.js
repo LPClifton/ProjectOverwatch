@@ -79,7 +79,7 @@ const SENTINEL_DIRECTIONAL_OVERRIDE_PRIORITIES =
         "critical",
         "high"
     ]);
-
+const SENTINEL_ALERT_INSPECTION_MS = 5000
 
 const DEFAULT_SYSTEM_ACCENT = "#4fd5ff";
 const ALERT_FLASH_DURATION = 3000;
@@ -167,6 +167,7 @@ let radarMetadataRefreshInProgress = false;
 
 let warningsRefreshTimer;
 let initialWarningsLoaded = false;
+let sentinelReturnTimer = null;
 
 const nwsZoneGeometryCache = new Map();
 const nwsZoneRequestCache = new Map();
@@ -5036,6 +5037,25 @@ function zoomToGeometryFeatures(
         return;
     }
 
+    if (
+        accuracyCircle &&
+        radarMap.hasLayer(
+            accuracyCircle
+        )
+    ) {
+        radarMap.removeLayer(
+            accuracyCircle
+        );
+    }
+
+    if (sentinelReturnTimer) {
+        clearTimeout(
+            sentinelReturnTimer
+        );
+
+        sentinelReturnTimer = null;
+    }
+
     const geometryLayer =
         L.geoJSON(
             geometryFeatures
@@ -5052,13 +5072,162 @@ function zoomToGeometryFeatures(
         return;
     }
 
-    radarMap.fitBounds(
-        bounds,
+    const outboundSearchZoom =
+        Math.max(
+            MIN_MAP_ZOOM,
+            radarMap.getZoom() - 3
+        );
+
+    /*
+     * Outbound stage 1:
+     * Pull back from the current view.
+     */
+    radarMap.flyTo(
+        radarMap.getCenter(),
+        outboundSearchZoom,
         {
-            padding: [40, 40],
-            animate: false
+            animate: true,
+            duration: 0.7
         }
     );
+
+    /*
+     * Outbound stage 2:
+     * Fly to the selected alert.
+     */
+    setTimeout(() => {
+        radarMap.flyToBounds(
+            bounds,
+            {
+                padding: [40, 40],
+                animate: true,
+                duration: 1.1,
+                maxZoom: 11
+            }
+        );
+
+        /*
+         * Hold on the alert, then begin
+         * the return sequence.
+         */
+        sentinelReturnTimer =
+            setTimeout(() => {
+                if (
+                    currentLatitude === null ||
+                    currentLongitude === null
+                ) {
+                    sentinelReturnTimer = null;
+
+                    return;
+                }
+
+                const returnSearchZoom =
+                    Math.max(
+                        MIN_MAP_ZOOM,
+                        radarMap.getZoom() - 3
+                    );
+
+                /*
+                 * Return stage 1:
+                 * Pull back from the alert.
+                 */
+                radarMap.flyTo(
+                    radarMap.getCenter(),
+                    returnSearchZoom,
+                    {
+                        animate: true,
+                        duration: 0.7
+                    }
+                );
+
+                /*
+                 * Return stage 2:
+                 * Fly back to the vehicle.
+                 */
+                setTimeout(() => {
+                    const returnZoom =
+                        operatingMode ===
+                            OPERATING_MODES.DRIVING
+                            ? navigationIntelligenceManager
+                                .targetZoom
+                            : PARKED_MAP_ZOOM;
+
+                    radarMap.flyTo(
+                        [
+                            currentLatitude,
+                            currentLongitude
+                        ],
+                        returnZoom,
+                        {
+                            animate: true,
+                            duration: 1.1
+                        }
+                    );
+
+                    /*
+                     * After the return flight,
+                     * restore orientation only.
+                     *
+                     * Do not call setView() again.
+                     */
+                    setTimeout(() => {
+                        if (
+                            operatingMode ===
+                            OPERATING_MODES.DRIVING
+                        ) {
+                            if (
+                                currentHeading !== null &&
+                                typeof radarMap.setBearing ===
+                                    "function"
+                            ) {
+                                const mapBearing =
+                                    convertHeadingToMapBearing(
+                                        currentHeading
+                                    );
+
+                                const visualMapBearing =
+                                    (
+                                        360 -
+                                        mapBearing
+                                    ) % 360;
+
+                                radarMap.setBearing(
+                                    visualMapBearing
+                                );
+                            }
+
+                            if (
+                                currentHeading !== null
+                            ) {
+                                applyMapLookAhead();
+                            }
+                        } else {
+                            if (
+                                typeof radarMap.setBearing ===
+                                    "function"
+                            ) {
+                                radarMap.setBearing(
+                                    0
+                                );
+                            }
+                        }
+
+                        if (
+                            accuracyCircle &&
+                            !radarMap.hasLayer(
+                                accuracyCircle
+                            )
+                        ) {
+                            accuracyCircle.addTo(
+                                radarMap
+                            );
+                        }
+                    }, 1150);
+                }, 750);
+
+                sentinelReturnTimer = null;
+            }, SENTINEL_ALERT_INSPECTION_MS);
+    }, 750);
 }
 
 function formatAlertTime(timeString) {
