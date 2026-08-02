@@ -5098,9 +5098,11 @@ function zoomToGeometryFeatures(
     }
 
     function restoreAccuracyCircle() {
+        if (!accuracyCircle) {
+            return;
+        }
+
         if (
-            accuracyCircleWasVisible &&
-            accuracyCircle &&
             !radarMap.hasLayer(
                 accuracyCircle
             )
@@ -5109,6 +5111,20 @@ function zoomToGeometryFeatures(
                 radarMap
             );
         }
+
+        if (
+            currentLatitude !== null &&
+            currentLongitude !== null
+        ) {
+            accuracyCircle.setLatLng(
+                [
+                    currentLatitude,
+                    currentLongitude
+                ]
+            );
+        }
+
+        accuracyCircle.bringToFront();
     }
 
     function restoreMapOrientation() {
