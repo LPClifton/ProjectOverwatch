@@ -75,69 +75,82 @@
                     Initializing map...
                 </p>
 
-                <div id="map-controls">
+            <div id="map-controls">
 
-                    <div id="radar-controls">
-                        <span id="radar-timestamp">
-                            Loading...
-                        </span>
+                <button
+                    id="toggle-radar-controls"
+                    type="button"
+                aria-label="Radar controls"
+                title="Radar controls"
+            >
+                🌧️
+            </button>
 
-                        <span id="radar-freshness">
-                            Checking radar...
-                        </span>
+            <div id="radar-controls">
 
-                        <button
-                            id="radar-prev"
-                            type="button"
-                            aria-label="Previous radar frame"
-                        >
-                            ⏮️
-                        </button>
+                <span id="radar-timestamp">
+                    Loading...
+                </span>
 
-                        <button
-                            id="radar-play"
-                            type="button"
-                            aria-label="Pause radar animation"
-                        >
-                            ⏸️
-                        </button>
+                <span id="radar-freshness">
+                    Checking radar...
+                </span>
 
-                        <button
-                            id="radar-next"
-                            type="button"
-                            aria-label="Next radar frame"
-                        >
-                            ⏭️
-                        </button>
-                    </div>
+                <button
+                    id="radar-prev"
+                    type="button"
+                    aria-label="Previous radar frame"
+                >
+                    ⏮️
+                </button>
 
-                    <div id="map-utility-controls">
-                        <span id="map-zoom-level">
-                            Z--
-                        </span>
+                <button
+                    id="radar-play"
+                    type="button"
+                    aria-label="Pause radar animation"
+                >
+                 ⏸️
+                </button>
 
-                        <button
-                            id="expand-map-btn"
-                            type="button"
-                            aria-label="Expand map"
-                            title="Expand map"
-                        >
-                        <span class="fullscreen-icon">
-                            ⛶
-                        </span>
-                        </button>
+                <button
+                    id="radar-next"
+                    type="button"
+                    aria-label="Next radar frame"
+                >
+                    ⏭️
+                </button>
 
-                        <button
-                            id="export-log-btn"
-                            type="button"
-                            aria-label="Export diagnostics"
-                            title="Export diagnostics"
-                        >
-                            📝
-                        </button>
-                    </div>
+            </div>
 
-                </div>
+            <div id="map-utility-controls">
+
+                <span id="map-zoom-level">
+                    Z--
+                </span>
+
+                <button
+                    id="expand-map-btn"
+                    type="button"
+                    aria-label="Expand map"
+                    title="Expand map"
+                >
+                    <span class="fullscreen-icon">
+                        ⛶
+                    </span>
+                </button>
+
+                <button
+                    id="export-log-btn"
+                    type="button"
+                    aria-label="Export diagnostics"
+                    title="Export diagnostics"
+                >
+                    📝
+                </button>
+
+            </div>
+
+        </div>    
             </div>    
         </section>
 

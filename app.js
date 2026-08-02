@@ -255,54 +255,78 @@ const contextManager = {
     messages: [],
 
     setStatus(status) {
+        this.messages =
+            this.messages.filter(
+                message =>
+                    message.source !==
+                    status.source
+            );
 
-        this.messages = this.messages.filter(
-            message => message.source !== status.source
+        this.messages.push(
+            status
         );
-
-        this.messages.push(status);
 
         this.render();
     },
 
     clearStatus(source) {
-
-        this.messages = this.messages.filter(
-            message => message.source !== source
-        );
+        this.messages =
+            this.messages.filter(
+                message =>
+                    message.source !==
+                    source
+            );
 
         this.render();
     },
 
     render() {
-
         const contextBar =
-            document.getElementById("context-bar");
+            document.getElementById(
+                "context-bar"
+            );
 
         if (!contextBar) {
             return;
         }
 
-        if (this.messages.length === 0) {
-
+        if (
+            this.messages.length === 0
+        ) {
             contextBar.innerHTML =
                 "⏳ Initializing Systems...";
+
+            contextBar.className = "";
 
             return;
         }
 
         const priorityOrder = {
-            critical: 4,
-            high: 3,
+            critical: 5,
+            high: 4,
+            medium: 3,
             normal: 2,
             low: 1
         };
 
         const highestPriority =
             [...this.messages].sort(
-                (a, b) =>
-                    priorityOrder[b.priority] -
-                    priorityOrder[a.priority]
+                (messageA, messageB) => {
+                    const priorityA =
+                        priorityOrder[
+                            messageA.priority
+                        ] || 0;
+
+                    const priorityB =
+                        priorityOrder[
+                            messageB.priority
+                        ] || 0;
+
+                    return (
+                        priorityB -
+                        priorityA
+                    );
+                }
             )[0];
 
         contextBar.innerHTML = `
@@ -846,10 +870,30 @@ const radarControlsVisibilityManager = {
     hideDelayMs: 4000,
     hideTimer: null,
     isDriving: false,
+    isExpanded: false,
 
     getControls() {
         return document.getElementById(
-            "map-controls"
+            "radar-controls"
+        );
+    },
+
+    getToggleButton() {
+        return document.getElementById(
+            "toggle-radar-controls"
+        );
+    },
+
+    isFullscreen() {
+        const mapPanel =
+            document.getElementById(
+                "map-panel"
+            );
+
+        return (
+            mapPanel?.classList.contains(
+                "fullscreen-map"
+            ) === true
         );
     },
 
@@ -865,46 +909,99 @@ const radarControlsVisibilityManager = {
         this.hideTimer = null;
     },
 
-    show() {
+    updateDisplay() {
         const radarControls =
             this.getControls();
 
-        if (!radarControls) {
+        const toggleButton =
+            this.getToggleButton();
+
+        if (
+            !radarControls ||
+            !toggleButton
+        ) {
             return;
         }
 
-        radarControls.classList.remove(
-            "map-controls-hidden"
+        const shouldShow =
+            this.isFullscreen() ||
+            this.isExpanded;
+
+        radarControls.classList.toggle(
+            "radar-controls-collapsed",
+            !shouldShow
         );
 
-        this.clearHideTimer();
+        toggleButton.setAttribute(
+            "aria-expanded",
+            String(shouldShow)
+        );
+
+        toggleButton.title =
+            shouldShow
+                ? "Hide radar controls"
+                : "Show radar controls";
+
+        toggleButton.setAttribute(
+            "aria-label",
+            shouldShow
+                ? "Hide radar controls"
+                : "Show radar controls"
+        );
     },
 
-    hide() {
-        const radarControls =
-            this.getControls();
+    expand() {
+        this.isExpanded = true;
 
-        if (!radarControls) {
+        this.clearHideTimer();
+        this.updateDisplay();
+    },
+
+    collapse() {
+        if (this.isFullscreen()) {
+            this.isExpanded = true;
+        } else {
+            this.isExpanded = false;
+        }
+
+        this.clearHideTimer();
+        this.updateDisplay();
+    },
+
+    toggle() {
+        if (this.isFullscreen()) {
             return;
         }
 
-        radarControls.classList.add(
-            "map-controls-hidden"
-        );
+        this.isExpanded =
+            !this.isExpanded;
 
-        this.clearHideTimer();
+        this.updateDisplay();
+
+        if (
+            this.isDriving &&
+            this.isExpanded
+        ) {
+            this.scheduleHide();
+        } else {
+            this.clearHideTimer();
+        }
     },
 
     scheduleHide() {
         this.clearHideTimer();
 
-        if (!this.isDriving) {
+        if (
+            !this.isDriving ||
+            !this.isExpanded ||
+            this.isFullscreen()
+        ) {
             return;
         }
 
         this.hideTimer =
             setTimeout(() => {
-                this.hide();
+                this.collapse();
             }, this.hideDelayMs);
     },
 
@@ -913,20 +1010,35 @@ const radarControlsVisibilityManager = {
             mode ===
             OPERATING_MODES.DRIVING;
 
-        this.show();
-
-        if (this.isDriving) {
-            this.scheduleHide();
+        if (this.isFullscreen()) {
+            this.isExpanded = true;
+        } else {
+            this.isExpanded = false;
         }
+
+        this.updateDisplay();
     },
 
     handleInteraction() {
-        if (!this.isDriving) {
+        if (
+            !this.isDriving ||
+            !this.isExpanded
+        ) {
             return;
         }
 
-        this.show();
         this.scheduleHide();
+    },
+
+    handleFullscreenChange() {
+        if (this.isFullscreen()) {
+            this.isExpanded = true;
+            this.clearHideTimer();
+        } else {
+            this.isExpanded = false;
+        }
+
+        this.updateDisplay();
     }
 };
 
@@ -1262,6 +1374,15 @@ function updateAlertsPanel() {
         alertsStatus.textContent =
             "🟢 All Clear";
 
+        /*
+         * Remove Sentinel from the Context Bar.
+         * The next-highest system message, such
+         * as GPS Locked, will become visible.
+         */
+        contextManager.clearStatus(
+            "sentinel"
+        );
+
         return;
     }
 
@@ -1273,10 +1394,8 @@ function updateAlertsPanel() {
     };
 
     /*
-     * Calculate or refresh the relevance score
-     * immediately before sorting. This allows
-     * distance, expiration, and direction data
-     * to influence the current ranking.
+     * Refresh each alert's current relevance
+     * score before ranking the alert list.
      */
     alerts.forEach(alert => {
         if (
@@ -1335,11 +1454,11 @@ function updateAlertsPanel() {
                         ? alertB.relevanceScore
                         : 0;
 
-                /*
-                 * Highest relevance score wins.
-                 */
                 if (scoreB !== scoreA) {
-                    return scoreB - scoreA;
+                    return (
+                        scoreB -
+                        scoreA
+                    );
                 }
 
                 const priorityA =
@@ -1364,14 +1483,12 @@ function updateAlertsPanel() {
                         ] || 0
                     );
 
-                /*
-                 * Priority is the first
-                 * tie-breaker.
-                 */
                 if (
                     priorityDifference !== 0
                 ) {
-                    return priorityDifference;
+                    return (
+                        priorityDifference
+                    );
                 }
 
                 const distanceA =
@@ -1388,10 +1505,6 @@ function updateAlertsPanel() {
                         ? alertB.distance
                         : Infinity;
 
-                /*
-                 * The nearest alert wins the
-                 * final tie.
-                 */
                 return (
                     distanceA -
                     distanceB
@@ -1472,19 +1585,32 @@ function updateAlertsPanel() {
 
     let alertDetails = "";
 
+    let contextDetail = "";
+
     if (
         highestAlert
             .affectsCurrentLocation === true
     ) {
         alertDetails +=
             " — Current Location";
+
+        contextDetail =
+            "Affects current location";
     } else {
         if (
             typeof highestAlert.distance ===
-            "number"
+                "number" &&
+            Number.isFinite(
+                highestAlert.distance
+            )
         ) {
             alertDetails +=
                 ` — ${highestAlert.distance.toFixed(
+                    1
+                )} miles`;
+
+            contextDetail =
+                `${highestAlert.distance.toFixed(
                     1
                 )} miles`;
         }
@@ -1492,60 +1618,87 @@ function updateAlertsPanel() {
         if (highestAlert.direction) {
             alertDetails +=
                 ` ${highestAlert.direction}`;
+
+            contextDetail +=
+                `${
+                    contextDetail
+                        ? " "
+                        : ""
+                }${highestAlert.direction}`;
         }
     }
+
+    /*
+     * Publish the highest-ranked Sentinel alert
+     * to the Context Bar. Its priority now
+     * controls both the text and border class.
+     */
+    contextManager.setStatus({
+        source: "sentinel",
+        priority:
+            alertPriority,
+        icon:
+            alertIcon,
+        title:
+            alertTitle,
+        detail:
+            contextDetail ||
+            "Active Sentinel alert"
+    });
 
     alertsStatus.innerHTML = "";
 
-const alertZoomButton =
-    document.createElement(
-        "button"
+    const alertZoomButton =
+        document.createElement(
+            "button"
+        );
+
+    alertZoomButton.type =
+        "button";
+
+    alertZoomButton.className =
+        "alert-zoom-link";
+
+    alertZoomButton.textContent =
+        `${alertIcon} ${alertTitle}${alertDetails}`;
+
+    alertZoomButton.title =
+        "Show alert on map";
+
+    alertZoomButton.setAttribute(
+        "aria-label",
+        `Show ${alertTitle} on map`
     );
 
-alertZoomButton.type =
-    "button";
+    alertZoomButton.addEventListener(
+        "click",
+        function () {
+            if (
+                !Array.isArray(
+                    highestAlert
+                        .geometryFeatures
+                ) ||
+                highestAlert
+                    .geometryFeatures
+                    .length === 0
+            ) {
+                console.warn(
+                    "[Sentinel] Selected alert has no geometry."
+                );
 
-alertZoomButton.className =
-    "alert-zoom-link";
+                return;
+            }
 
-alertZoomButton.textContent =
-    `${alertIcon} ${alertTitle}${alertDetails}`;
-
-alertZoomButton.title =
-    "Show alert on map";
-
-alertZoomButton.setAttribute(
-    "aria-label",
-    `Show ${alertTitle} on map`
-);
-
-alertZoomButton.addEventListener(
-    "click",
-    function () {
-        if (
-            !Array.isArray(
-                highestAlert.geometryFeatures
-            ) ||
-            highestAlert
-                .geometryFeatures
-                .length === 0
-        ) {
-            console.warn(
-                "[Sentinel] Selected alert has no geometry."
+            zoomToGeometryFeatures(
+                highestAlert
+                    .geometryFeatures
             );
-
-            return;
         }
+    );
 
-        zoomToGeometryFeatures(
-            highestAlert.geometryFeatures
-        );
-    }
-);
-
-alertsStatus.appendChild(
-    alertZoomButton
-);
+    alertsStatus.appendChild(
+        alertZoomButton
+    );
 
     console.log(
         "[Sentinel] Highest-ranked alert:",
@@ -3439,6 +3592,11 @@ function initializeRadarControls() {
             "radar-controls"
         );
 
+    const toggleButton =
+        document.getElementById(
+            "toggle-radar-controls"
+        );
+
     const previousButton =
         document.getElementById(
             "radar-prev"
@@ -3456,6 +3614,7 @@ function initializeRadarControls() {
 
     if (
         !radarControls ||
+        !toggleButton ||
         !previousButton ||
         !playButton ||
         !nextButton
@@ -3468,8 +3627,8 @@ function initializeRadarControls() {
     }
 
     /*
-     * Prevent taps on the radar controls from
-     * also triggering the map underneath.
+     * Prevent taps on either the toggle button
+     * or radar controls from reaching the map.
      */
     L.DomEvent.disableClickPropagation(
         radarControls
@@ -3479,9 +3638,25 @@ function initializeRadarControls() {
         radarControls
     );
 
+    L.DomEvent.disableClickPropagation(
+        toggleButton
+    );
+
+    L.DomEvent.disableScrollPropagation(
+        toggleButton
+    );
+
+    toggleButton.addEventListener(
+        "click",
+        function () {
+            radarControlsVisibilityManager
+                .toggle();
+        }
+    );
+
     /*
-     * Touching the radar control group resets
-     * the four-second hide timer while driving.
+     * Touching the expanded control group
+     * restarts the driving-mode hide timer.
      */
     radarControls.addEventListener(
         "pointerdown",
