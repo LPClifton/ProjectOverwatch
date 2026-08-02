@@ -477,6 +477,24 @@ body.map-open {
         infinite;
 }
 
+/* Compact layers menu for wide landscape screens */
+@media screen and (orientation: landscape) {
+    #map-panel.fullscreen-map
+    .leaflet-control-layers-expanded {
+        max-width: 240px;
+        max-height: calc(100vh - 32px);
+        overflow-y: auto;
+        font-size: 14px;
+    }
+
+    #map-panel.fullscreen-map
+    .leaflet-control-layers-toggle {
+        width: 42px;
+        height: 42px;
+        background-size: 24px 24px;
+    }
+}
+
 /* ================================
     Map Marker Icons
 ================================ */  
@@ -900,4 +918,60 @@ body.map-open {
     visibility: hidden !important;
     pointer-events: none !important;
     transform: translateY(10px) !important;
+}
+
+/* ==================================================
+   FULLSCREEN MAP — LEAFLET LAYERS MENU
+   ================================================== */
+
+/*
+ * Keep Leaflet controls above the radar and map UI.
+ */
+#map-panel.fullscreen-map .leaflet-control-container {
+    position: relative;
+    z-index: 2000;
+}
+
+/*
+ * Keep the layers control visible and accessible
+ * in fullscreen mode.
+ */
+#map-panel.fullscreen-map .leaflet-control-layers {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+
+    position: relative;
+    z-index: 2100;
+
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+
+    background: rgba(8, 18, 28, 0.92);
+    color: #ffffff;
+
+    border: 1px solid var(--system-accent);
+    border-radius: 8px;
+
+    box-shadow:
+        0 4px 16px rgba(0, 0, 0, 0.55);
+}
+
+/*
+ * Improve label readability in the dark interface.
+ */
+#map-panel.fullscreen-map
+.leaflet-control-layers label {
+    color: #ffffff;
+}
+
+/*
+ * Keep the upper-left Leaflet control group
+ * within the visible fullscreen map.
+ */
+#map-panel.fullscreen-map
+.leaflet-top.leaflet-left {
+    top: 12px;
+    left: 12px;
+    z-index: 2100;
 }

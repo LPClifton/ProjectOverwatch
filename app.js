@@ -1923,12 +1923,13 @@ function initializeMap() {
     const overlayMaps = {};
 
     layerControl = L.control.layers(
-        baseMaps,
-        overlayMaps,
-        {
-            collapsed: false
-        }
-    ).addTo(radarMap)
+    baseMaps,
+    overlayMaps,
+    {
+        collapsed: true,
+        position: "topleft"
+    }
+).addTo(radarMap);
 
     radarLayerGroup =
     L.layerGroup().addTo(radarMap);
