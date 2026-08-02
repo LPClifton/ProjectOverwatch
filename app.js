@@ -46,6 +46,40 @@ const RADAR_REFRESH_INTERVAL_MS =
 
 
 const SENTINEL_RADIUS_MILES = 250;
+/*
+ * Broad first-pass geographic candidates.
+ *
+ * These are not treated as being within
+ * Sentinel range automatically. They only
+ * qualify for detailed geometry processing.
+ */
+const SENTINEL_CANDIDATE_AREAS =
+    new Set([
+        "LA",
+        "TX",
+        "MS",
+        "AR"
+    ]);
+/*
+ * Sentinel first uses SENTINEL_RADIUS_MILES as
+ * the absolute collection and safety boundary.
+ *
+ * These directional limits will later refine
+ * which alerts are operationally relevant
+ * based on vehicle heading.
+ */
+const SENTINEL_DIRECTIONAL_LIMITS_MILES = {
+    ahead: 250,
+    left: 100,
+    right: 100,
+    behind: 50
+};
+const SENTINEL_DIRECTIONAL_OVERRIDE_PRIORITIES =
+    new Set([
+        "critical",
+        "high"
+    ]);
+
 
 const DEFAULT_SYSTEM_ACCENT = "#4fd5ff";
 const ALERT_FLASH_DURATION = 3000;
@@ -1460,8 +1494,57 @@ function updateAlertsPanel() {
         }
     }
 
-    alertsStatus.textContent =
-        `${alertIcon} ${alertTitle}${alertDetails}`;
+    alertsStatus.innerHTML = "";
+
+const alertZoomButton =
+    document.createElement(
+        "button"
+    );
+
+alertZoomButton.type =
+    "button";
+
+alertZoomButton.className =
+    "alert-zoom-link";
+
+alertZoomButton.textContent =
+    `${alertIcon} ${alertTitle}${alertDetails}`;
+
+alertZoomButton.title =
+    "Show alert on map";
+
+alertZoomButton.setAttribute(
+    "aria-label",
+    `Show ${alertTitle} on map`
+);
+
+alertZoomButton.addEventListener(
+    "click",
+    function () {
+        if (
+            !Array.isArray(
+                highestAlert.geometryFeatures
+            ) ||
+            highestAlert
+                .geometryFeatures
+                .length === 0
+        ) {
+            console.warn(
+                "[Sentinel] Selected alert has no geometry."
+            );
+
+            return;
+        }
+
+        zoomToGeometryFeatures(
+            highestAlert.geometryFeatures
+        );
+    }
+);
+
+alertsStatus.appendChild(
+    alertZoomButton
+);
 
     console.log(
         "[Sentinel] Highest-ranked alert:",
@@ -1837,6 +1920,663 @@ function requestWeatherLocation() {
 // =============================
 // Sentinel Functions
 // =============================
+
+function getAlertAreaCodes(feature) {
+    const properties =
+        feature?.properties || {};
+
+    const areaCodes =
+        new Set();
+
+    const geocode =
+        properties.geocode || {};
+
+    /*
+     * UGC identifiers usually begin with a
+     * two-letter state or marine-zone prefix.
+     */
+    const ugcCodes =
+        Array.isArray(geocode.UGC)
+            ? geocode.UGC
+            : [];
+
+    ugcCodes.forEach(code => {
+        if (
+            typeof code === "string" &&
+            code.length >= 2
+        ) {
+            areaCodes.add(
+                code.slice(0, 2)
+                    .toUpperCase()
+            );
+        }
+    });
+
+    /*
+     * Use affected-zone URLs as a fallback.
+     */
+    const affectedZones =
+        Array.isArray(
+            properties.affectedZones
+        )
+            ? properties.affectedZones
+            : [];
+
+    affectedZones.forEach(zoneUrl => {
+        const zoneId =
+            getNwsZoneId(zoneUrl);
+
+        if (
+            typeof zoneId === "string" &&
+            zoneId.length >= 2
+        ) {
+            areaCodes.add(
+                zoneId.slice(0, 2)
+                    .toUpperCase()
+            );
+        }
+    });
+
+    return Array.from(areaCodes);
+}
+
+function isSentinelCandidateArea(feature) {
+    const areaCodes =
+        getAlertAreaCodes(feature);
+
+    return areaCodes.some(code => {
+        return SENTINEL_CANDIDATE_AREAS
+            .has(code);
+    });
+}
+
+function isPointInsideRing(
+    latitude,
+    longitude,
+    ring
+) {
+    let isInside = false;
+
+    for (
+        let currentIndex = 0,
+            previousIndex = ring.length - 1;
+        currentIndex < ring.length;
+        previousIndex = currentIndex++
+    ) {
+        const currentPoint =
+            ring[currentIndex];
+
+        const previousPoint =
+            ring[previousIndex];
+
+        const currentLongitude =
+            currentPoint[0];
+
+        const currentLatitude =
+            currentPoint[1];
+
+        const previousLongitude =
+            previousPoint[0];
+
+        const previousLatitude =
+            previousPoint[1];
+
+        const crossesLatitude =
+            (
+                currentLatitude > latitude
+            ) !== (
+                previousLatitude > latitude
+            );
+
+        const intersectionLongitude =
+            (
+                (
+                    previousLongitude -
+                    currentLongitude
+                ) *
+                (
+                    latitude -
+                    currentLatitude
+                )
+            ) /
+            (
+                previousLatitude -
+                currentLatitude
+            ) +
+            currentLongitude;
+
+        if (
+            crossesLatitude &&
+            longitude <
+                intersectionLongitude
+        ) {
+            isInside = !isInside;
+        }
+    }
+
+    return isInside;
+}
+
+function isPointInsidePolygonCoordinates(
+    latitude,
+    longitude,
+    polygonCoordinates
+) {
+    if (
+        !Array.isArray(
+            polygonCoordinates
+        ) ||
+        polygonCoordinates.length === 0
+    ) {
+        return false;
+    }
+
+    /*
+     * The first ring is the outer boundary.
+     */
+    const outerRing =
+        polygonCoordinates[0];
+
+    if (
+        !isPointInsideRing(
+            latitude,
+            longitude,
+            outerRing
+        )
+    ) {
+        return false;
+    }
+
+    /*
+     * Remaining rings represent holes.
+     */
+    for (
+        let ringIndex = 1;
+        ringIndex <
+            polygonCoordinates.length;
+        ringIndex++
+    ) {
+        if (
+            isPointInsideRing(
+                latitude,
+                longitude,
+                polygonCoordinates[
+                    ringIndex
+                ]
+            )
+        ) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function calculateNearestPointOnSegment(
+    latitude,
+    longitude,
+    segmentStart,
+    segmentEnd
+) {
+    const referenceLatitudeRadians =
+        degreesToRadians(latitude);
+
+    const milesPerLatitudeDegree =
+        69.0;
+
+    const milesPerLongitudeDegree =
+        69.172 *
+        Math.cos(
+            referenceLatitudeRadians
+        );
+
+    const startX =
+        (
+            segmentStart[0] -
+            longitude
+        ) *
+        milesPerLongitudeDegree;
+
+    const startY =
+        (
+            segmentStart[1] -
+            latitude
+        ) *
+        milesPerLatitudeDegree;
+
+    const endX =
+        (
+            segmentEnd[0] -
+            longitude
+        ) *
+        milesPerLongitudeDegree;
+
+    const endY =
+        (
+            segmentEnd[1] -
+            latitude
+        ) *
+        milesPerLatitudeDegree;
+
+    const segmentX =
+        endX - startX;
+
+    const segmentY =
+        endY - startY;
+
+    const segmentLengthSquared =
+        segmentX * segmentX +
+        segmentY * segmentY;
+
+    let projection = 0;
+
+    if (segmentLengthSquared > 0) {
+        projection =
+            (
+                -startX * segmentX +
+                -startY * segmentY
+            ) /
+            segmentLengthSquared;
+
+        projection =
+            Math.max(
+                0,
+                Math.min(
+                    1,
+                    projection
+                )
+            );
+    }
+
+    const nearestX =
+        startX +
+        projection *
+        segmentX;
+
+    const nearestY =
+        startY +
+        projection *
+        segmentY;
+
+    const nearestLongitude =
+        longitude +
+        nearestX /
+        milesPerLongitudeDegree;
+
+    const nearestLatitude =
+        latitude +
+        nearestY /
+        milesPerLatitudeDegree;
+
+    return {
+        distanceMiles:
+            Math.hypot(
+                nearestX,
+                nearestY
+            ),
+
+        nearestLatitude,
+        nearestLongitude
+    };
+}
+
+function measurePointAgainstRing(
+    latitude,
+    longitude,
+    ring
+) {
+    if (
+        !Array.isArray(ring) ||
+        ring.length < 2
+    ) {
+        return {
+            distanceMiles: Infinity,
+            nearestLatitude: null,
+            nearestLongitude: null
+        };
+    }
+
+    let nearestMeasurement = {
+        distanceMiles: Infinity,
+        nearestLatitude: null,
+        nearestLongitude: null
+    };
+
+    function inspectSegment(
+        segmentStart,
+        segmentEnd
+    ) {
+        const measurement =
+            calculateNearestPointOnSegment(
+                latitude,
+                longitude,
+                segmentStart,
+                segmentEnd
+            );
+
+        if (
+            measurement.distanceMiles <
+            nearestMeasurement.distanceMiles
+        ) {
+            nearestMeasurement =
+                measurement;
+        }
+    }
+
+    for (
+        let pointIndex = 0;
+        pointIndex < ring.length - 1;
+        pointIndex++
+    ) {
+        inspectSegment(
+            ring[pointIndex],
+            ring[pointIndex + 1]
+        );
+    }
+
+    const firstPoint =
+        ring[0];
+
+    const lastPoint =
+        ring[ring.length - 1];
+
+    if (
+        firstPoint[0] !== lastPoint[0] ||
+        firstPoint[1] !== lastPoint[1]
+    ) {
+        inspectSegment(
+            lastPoint,
+            firstPoint
+        );
+    }
+
+    return nearestMeasurement;
+}
+
+function measurePointAgainstGeometry(
+    latitude,
+    longitude,
+    geometry
+) {
+    if (
+        !geometry ||
+        !Array.isArray(
+            geometry.coordinates
+        )
+    ) {
+        return {
+            affectsCurrentLocation: false,
+            distanceMiles: Infinity,
+            nearestLatitude: null,
+            nearestLongitude: null
+        };
+    }
+
+    let polygons = [];
+
+    if (
+        geometry.type ===
+        "Polygon"
+    ) {
+        polygons = [
+            geometry.coordinates
+        ];
+    } else if (
+        geometry.type ===
+        "MultiPolygon"
+    ) {
+        polygons =
+            geometry.coordinates;
+    } else {
+        return {
+            affectsCurrentLocation: false,
+            distanceMiles: Infinity,
+            nearestLatitude: null,
+            nearestLongitude: null
+        };
+    }
+
+    let nearestMeasurement = {
+        affectsCurrentLocation: false,
+        distanceMiles: Infinity,
+        nearestLatitude: null,
+        nearestLongitude: null
+    };
+
+    for (
+        const polygonCoordinates
+        of polygons
+    ) {
+        if (
+            isPointInsidePolygonCoordinates(
+                latitude,
+                longitude,
+                polygonCoordinates
+            )
+        ) {
+            return {
+                affectsCurrentLocation: true,
+                distanceMiles: 0,
+                nearestLatitude: latitude,
+                nearestLongitude: longitude
+            };
+        }
+
+        for (
+            const ring
+            of polygonCoordinates
+        ) {
+            const ringMeasurement =
+                measurePointAgainstRing(
+                    latitude,
+                    longitude,
+                    ring
+                );
+
+            if (
+                ringMeasurement
+                    .distanceMiles <
+                nearestMeasurement
+                    .distanceMiles
+            ) {
+                nearestMeasurement = {
+                    affectsCurrentLocation:
+                        false,
+
+                    ...ringMeasurement
+                };
+            }
+        }
+    }
+
+    return nearestMeasurement;
+}
+
+function measureAlertGeometryFeatures(
+    latitude,
+    longitude,
+    geometryFeatures
+) {
+    let nearestMeasurement = {
+        affectsCurrentLocation: false,
+        distanceMiles: Infinity,
+        nearestLatitude: null,
+        nearestLongitude: null
+    };
+
+    geometryFeatures.forEach(
+        geometryFeature => {
+            const measurement =
+                measurePointAgainstGeometry(
+                    latitude,
+                    longitude,
+                    geometryFeature.geometry
+                );
+
+            if (
+                measurement
+                    .affectsCurrentLocation
+            ) {
+                nearestMeasurement =
+                    measurement;
+
+                return;
+            }
+
+            if (
+                measurement.distanceMiles <
+                nearestMeasurement.distanceMiles
+            ) {
+                nearestMeasurement =
+                    measurement;
+            }
+        }
+    );
+
+    return nearestMeasurement;
+}
+
+function describeAlertDirection(
+    measurement
+) {
+    if (
+        measurement
+            .affectsCurrentLocation
+    ) {
+        return {
+            bearing: null,
+            compassDirection:
+                "Current Location",
+            relativeDirection:
+                "Current Location"
+        };
+    }
+
+    if (
+        !Number.isFinite(
+            measurement.nearestLatitude
+        ) ||
+        !Number.isFinite(
+            measurement.nearestLongitude
+        )
+    ) {
+        return {
+            bearing: null,
+            compassDirection:
+                "Direction Unknown",
+            relativeDirection:
+                "Direction Unknown"
+        };
+    }
+
+    const bearing =
+        calculateBearing(
+            currentLatitude,
+            currentLongitude,
+            measurement.nearestLatitude,
+            measurement.nearestLongitude
+        );
+
+    const compassDirection =
+        bearingToCompass(
+            bearing
+        );
+
+    let relativeDirection =
+        compassDirection;
+
+    if (
+        operatingMode ===
+            OPERATING_MODES.DRIVING &&
+        currentHeading !== null
+    ) {
+        relativeDirection =
+            classifyRelativeDirection(
+                currentHeading,
+                bearing
+            );
+    }
+
+    return {
+        bearing,
+        compassDirection,
+        relativeDirection
+    };
+}
+
+async function getNearbySentinelAlerts() {
+    const nationalAlerts =
+        await fetchAllActiveNwsAlerts();
+
+    const regionalCandidates =
+        nationalAlerts.filter(
+            isSentinelCandidateArea
+        );
+
+    const nearbyAlerts = [];
+
+    for (
+        const feature
+        of regionalCandidates
+    ) {
+        const geometryFeatures =
+            await resolveAlertGeometryFeatures(
+                feature
+            );
+
+        if (
+            geometryFeatures.length === 0
+        ) {
+            continue;
+        }
+
+        const measurement =
+            measureAlertGeometryFeatures(
+                currentLatitude,
+                currentLongitude,
+                geometryFeatures
+            );
+
+        if (
+            !Number.isFinite(
+                measurement.distanceMiles
+            ) ||
+            measurement.distanceMiles >
+                SENTINEL_RADIUS_MILES
+        ) {
+            continue;
+        }
+
+        const direction =
+            describeAlertDirection(
+                measurement
+            );
+
+        nearbyAlerts.push({
+            feature,
+            geometryFeatures,
+            measurement,
+            direction
+        });
+    }
+
+    console.log(
+        "[Sentinel] Nearby alert processing complete:",
+        {
+            nationalAlerts:
+                nationalAlerts.length,
+
+            regionalCandidates:
+                regionalCandidates.length,
+
+            withinRadius:
+                nearbyAlerts.length
+        }
+    );
+
+    return nearbyAlerts;
+}
+
 
 // Route awareness
 // Threat evaluation
@@ -2950,6 +3690,103 @@ function addTestLightningStrike() {
 // NWS Warnings
 // ===================================
 
+async function fetchAllActiveNwsAlerts() {
+    const alertsUrl =
+        "https://api.weather.gov/alerts/active";
+
+    console.log(
+        "[Sentinel] Requesting national active alerts:",
+        alertsUrl
+    );
+
+    const response =
+        await fetch(
+            alertsUrl,
+            {
+                headers: {
+                    Accept:
+                        "application/geo+json"
+                },
+
+                cache: "no-store"
+            }
+        );
+
+    if (!response.ok) {
+        throw new Error(
+            `NWS national alert request failed: ${response.status}`
+        );
+    }
+
+    const alertData =
+        await response.json();
+
+    const features =
+        Array.isArray(
+            alertData.features
+        )
+            ? alertData.features
+            : [];
+
+    console.log(
+        "[Sentinel] National active alerts received:",
+        features.length
+    );
+
+    return features;
+}
+
+async function testNationalNwsAlertRetrieval() {
+    try {
+        const features =
+            await fetchAllActiveNwsAlerts();
+
+        console.table(
+            features.map(feature => {
+                const properties =
+                    feature.properties || {};
+
+                return {
+                    event:
+                        properties.event,
+
+                    area:
+                        properties.areaDesc,
+
+                    severity:
+                        properties.severity,
+
+                    urgency:
+                        properties.urgency,
+
+                    hasGeometry:
+                        Boolean(
+                            feature.geometry
+                        ),
+
+                    affectedZones:
+                        Array.isArray(
+                            properties.affectedZones
+                        )
+                            ? properties
+                                .affectedZones
+                                .length
+                            : 0
+                };
+            })
+        );
+
+        return features;
+    } catch (error) {
+        console.error(
+            "[Sentinel] National alert test failed:",
+            error
+        );
+
+        return [];
+    }
+}
+
 const NWS_ALERT_PRIORITY_RULES = {
     critical: [
         "tornado emergency",
@@ -3244,55 +4081,82 @@ async function fetchNwsZoneGeometry(zoneUrl) {
     return zoneRequest;
 }
 
+async function resolveAlertGeometryFeatures(
+    feature
+) {
+    if (feature?.geometry) {
+        return [
+            {
+                type: "Feature",
+                properties:
+                    feature.properties || {},
+                geometry:
+                    feature.geometry
+            }
+        ];
+    }
+
+    const properties =
+        feature?.properties || {};
+
+    const affectedZones =
+        Array.isArray(
+            properties.affectedZones
+        )
+            ? properties.affectedZones
+            : [];
+
+    if (affectedZones.length === 0) {
+        return [];
+    }
+
+    const zoneResults =
+        await Promise.all(
+            affectedZones.map(
+                fetchNwsZoneGeometry
+            )
+        );
+
+    return zoneResults
+        .filter(zoneData => {
+            return Boolean(
+                zoneData?.geometry
+            );
+        })
+        .map(zoneData => {
+            return {
+                type: "Feature",
+                properties:
+                    zoneData.properties || {},
+                geometry:
+                    zoneData.geometry
+            };
+        });
+}
+
 async function loadNwsWarnings() {
     if (
         currentLatitude === null ||
         currentLongitude === null
     ) {
         console.log(
-            "Sentinel waiting for GPS before loading NWS warnings."
+            "[Sentinel] Waiting for GPS before loading NWS alerts."
         );
 
         return;
     }
 
-    const warningsUrl =
-        "https://api.weather.gov/alerts/active" +
-        `?point=${currentLatitude},${currentLongitude}`;
+    if (!warningsLayer) {
+        console.warn(
+            "[Sentinel] Warning layer is not initialized."
+        );
 
-    console.log(
-        "NWS warning URL:",
-        warningsUrl
-    );
+        return;
+    }
 
     try {
-        const response =
-            await fetch(
-                warningsUrl,
-                {
-                    headers: {
-                        Accept:
-                            "application/geo+json"
-                    },
-                    cache: "no-store"
-                }
-            );
-
-        if (!response.ok) {
-            throw new Error(
-                `NWS request failed: ${response.status}`
-            );
-        }
-
-        const warningData =
-            await response.json();
-
-        const features =
-            Array.isArray(
-                warningData.features
-            )
-                ? warningData.features
-                : [];
+        const sentinelAlerts =
+            await getNearbySentinelAlerts();
 
         warningsLayer.clearLayers();
 
@@ -3305,11 +4169,22 @@ async function loadNwsWarnings() {
         let zoneBasedAlertCount = 0;
         let zonePolygonCount = 0;
 
-        /*
-         * Use a for...of loop because fetching
-         * missing zone geometry is asynchronous.
-         */
-        for (const feature of features) {
+        for (
+            const sentinelAlert
+            of sentinelAlerts
+        ) {
+            const feature =
+                sentinelAlert.feature;
+
+            const geometryFeatures =
+                sentinelAlert.geometryFeatures;
+
+            const measurement =
+                sentinelAlert.measurement;
+
+            const directionData =
+                sentinelAlert.direction;
+
             const properties =
                 feature.properties || {};
 
@@ -3328,294 +4203,23 @@ async function loadNwsWarnings() {
                     eventName
                 );
 
-            properties.priority =
-                priority;
+            const alertId =
+                feature.id ||
+                properties.id ||
+                [
+                    "nws",
+                    eventName,
+                    properties.sent,
+                    properties.areaDesc
+                ].join("-");
 
-            properties.distanceMiles = 0;
-            properties.direction =
-                "Current Location";
+            const displayDirection =
+                measurement.affectsCurrentLocation
+                    ? "Current Location"
+                    : directionData.relativeDirection;
 
             const relevanceScore =
-    calculateSentinelRelevanceScore({
-        priority,
-
-        severity:
-            properties.severity,
-
-        urgency:
-            properties.urgency,
-
-        certainty:
-            properties.certainty,
-
-        distanceMiles: 0,
-
-        direction:
-            "Current Location",
-
-        expires:
-            properties.expires,
-
-        affectsCurrentLocation: true
-    });
-
-notificationManager.addAlert({
-    id:
-        feature.id ||
-        properties.id ||
-        [
-            "nws",
-            eventName,
-            properties.sent,
-            properties.areaDesc
-        ].join("-"),
-
-    source: "NWS",
-    createdBy: "Sentinel",
-
-    title: eventName,
-    priority,
-
-    capSeverity:
-        properties.severity,
-
-    urgency:
-        properties.urgency,
-
-    certainty:
-        properties.certainty,
-
-    distance: 0,
-
-    direction:
-        "Current Location",
-
-    affectsCurrentLocation: true,
-
-    expires:
-        properties.expires,
-
-    relevanceScore,
-
-    icon
-});
-
-            activeAlertCount++;
-
-            /*
-             * Draw the alert's own polygon when
-             * one is included in the response.
-             */
-            if (feature.geometry) {
-                const alertLayer =
-                    L.geoJSON(
-                        feature,
-                        {
-                            style: function () {
-                                return getWarningStyle(
-                                    eventName,
-                                    properties
-                                );
-                            },
-
-                            onEachFeature:
-                                function (
-                                    mappedFeature,
-                                    layer
-                                ) {
-                                    layer.bindPopup(`
-                                        <strong>
-                                            ${icon} ${eventName}
-                                        </strong>
-                                        <br>
-
-                                        ${
-                                            properties.headline ||
-                                            ""
-                                        }
-                                        <br><br>
-
-                                        <strong>Area:</strong>
-                                        ${
-                                            properties.areaDesc ||
-                                            "Unknown"
-                                        }
-                                        <br>
-
-                                        <strong>Coverage:</strong>
-                                        Alert Polygon
-                                        <br>
-
-                                        <strong>Severity:</strong>
-                                        ${
-                                            properties.severity ||
-                                            "Unknown"
-                                        }
-                                        <br>
-
-                                        <strong>Urgency:</strong>
-                                        ${
-                                            properties.urgency ||
-                                            "Unknown"
-                                        }
-                                        <br>
-
-                                        <strong>Expires:</strong>
-                                        ${
-                                            formatAlertTime(
-                                                properties.expires
-                                            )
-                                        }
-                                    `);
-                                }
-                        }
-                    );
-
-                alertLayer.addTo(
-                    warningsLayer
-                );
-
-                directPolygonCount++;
-            } else {
-                /*
-                 * Zone-based advisories often
-                 * omit embedded geometry.
-                 */
-                zoneBasedAlertCount++;
-
-                const affectedZones =
-                    Array.isArray(
-                        properties.affectedZones
-                    )
-                        ? properties.affectedZones
-                        : [];
-
-                const zoneResults =
-                    await Promise.all(
-                        affectedZones.map(
-                            fetchNwsZoneGeometry
-                        )
-                    );
-
-                zoneResults.forEach(
-                    (zoneData, index) => {
-                        if (
-                            !zoneData ||
-                            !zoneData.geometry
-                        ) {
-                            return;
-                        }
-
-                        const zoneUrl =
-                            affectedZones[index];
-
-                        const zoneId =
-                            getNwsZoneId(
-                                zoneUrl
-                            );
-
-                        const zoneName =
-                            zoneData.properties
-                                ?.name ||
-                            zoneId ||
-                            "Unknown Zone";
-
-                        const zoneFeature = {
-                            type: "Feature",
-
-                            properties:
-                                zoneData.properties ||
-                                {},
-
-                            geometry:
-                                zoneData.geometry
-                        };
-
-                        const zoneLayer =
-                            L.geoJSON(
-                                zoneFeature,
-                                {
-                                    style:
-                                        function () {
-                                            return getWarningStyle(
-                                                eventName,
-                                                properties
-                                            );
-                                        },
-
-                                    onEachFeature:
-                                        function (
-                                            mappedFeature,
-                                            layer
-                                        ) {
-                                            layer.bindPopup(`
-                                                <strong>
-                                                    ${icon} ${eventName}
-                                                </strong>
-                                                <br>
-
-                                                ${
-                                                    properties.headline ||
-                                                    ""
-                                                }
-                                                <br><br>
-
-                                                <strong>Area:</strong>
-                                                ${
-                                                    properties.areaDesc ||
-                                                    "Unknown"
-                                                }
-                                                <br>
-
-                                                <strong>Zone:</strong>
-                                                ${zoneName}
-                                                ${
-                                                    zoneId
-                                                        ? ` (${zoneId})`
-                                                        : ""
-                                                }
-                                                <br>
-
-                                                <strong>Severity:</strong>
-                                                ${
-                                                    properties.severity ||
-                                                    "Unknown"
-                                                }
-                                                <br>
-
-                                                <strong>Urgency:</strong>
-                                                ${
-                                                    properties.urgency ||
-                                                    "Unknown"
-                                                }
-                                                <br>
-
-                                                <strong>Expires:</strong>
-                                                ${
-                                                    formatAlertTime(
-                                                        properties.expires
-                                                    )
-                                                }
-                                            `);
-                                        }
-                                }
-                            );
-
-                        zoneLayer.addTo(
-                            warningsLayer
-                        );
-
-                        zonePolygonCount++;
-                    }
-                );
-            }
-
-            console.log(
-                "[Sentinel]",
-                {
-                    event:
-                        eventName,
-
+                calculateSentinelRelevanceScore({
                     priority,
 
                     severity:
@@ -3624,25 +4228,224 @@ notificationManager.addAlert({
                     urgency:
                         properties.urgency,
 
-                    directGeometry:
-                        Boolean(
-                            feature.geometry
-                        ),
+                    certainty:
+                        properties.certainty,
 
-                    affectedZoneCount:
-                        Array.isArray(
-                            properties.affectedZones
-                        )
-                            ? properties
-                                .affectedZones
-                                .length
-                            : 0,
+                    distanceMiles:
+                        measurement.distanceMiles,
+
+                    direction:
+                        displayDirection,
+
+                    expires:
+                        properties.expires,
+
+                    affectsCurrentLocation:
+                        measurement.affectsCurrentLocation
+                });
+
+            notificationManager.addAlert({
+                id:
+                    alertId,
+
+                source:
+                    "NWS",
+
+                createdBy:
+                    "Sentinel",
+
+                title:
+                    eventName,
+
+                priority,
+
+                geometryFeatures:
+                    geometryFeatures,
+
+                capSeverity:
+                    properties.severity,
+
+                urgency:
+                    properties.urgency,
+
+                certainty:
+                    properties.certainty,
+
+                distance:
+                    measurement.distanceMiles,
+
+                direction:
+                    displayDirection,
+
+                compassDirection:
+                    directionData.compassDirection,
+
+                bearing:
+                    directionData.bearing,
+
+                nearestLatitude:
+                    measurement.nearestLatitude,
+
+                nearestLongitude:
+                    measurement.nearestLongitude,
+
+                affectsCurrentLocation:
+                    measurement.affectsCurrentLocation,
+
+                expires:
+                    properties.expires,
+
+                relevanceScore,
+
+                icon
+            });
+
+            activeAlertCount++;
+
+            if (feature.geometry) {
+                directPolygonCount++;
+            } else {
+                zoneBasedAlertCount++;
+            }
+
+            geometryFeatures.forEach(
+                geometryFeature => {
+                    const alertLayer =
+                        L.geoJSON(
+                            geometryFeature,
+                            {
+                                style:
+                                    function () {
+                                        return getWarningStyle(
+                                            eventName,
+                                            properties
+                                        );
+                                    },
+
+                                onEachFeature:
+                                    function (
+                                        mappedFeature,
+                                        layer
+                                    ) {
+                                        const distanceText =
+                                            measurement
+                                                .affectsCurrentLocation
+                                                ? "Current Location"
+                                                : (
+                                                    `${measurement
+                                                        .distanceMiles
+                                                        .toFixed(1)} miles`
+                                                );
+
+                                        layer.bindPopup(`
+                                            <strong>
+                                                ${icon} ${eventName}
+                                            </strong>
+                                            <br>
+
+                                            ${
+                                                properties.headline ||
+                                                ""
+                                            }
+                                            <br><br>
+
+                                            <strong>Area:</strong>
+                                            ${
+                                                properties.areaDesc ||
+                                                "Unknown"
+                                            }
+                                            <br>
+
+                                            <strong>Distance:</strong>
+                                            ${distanceText}
+                                            <br>
+
+                                            <strong>Direction:</strong>
+                                            ${displayDirection}
+                                            <br>
+
+                                            <strong>Bearing:</strong>
+                                            ${
+                                                directionData.bearing ===
+                                                null
+                                                    ? "Current Location"
+                                                    : (
+                                                        `${directionData
+                                                            .bearing
+                                                            .toFixed(1)}°`
+                                                    )
+                                            }
+                                            <br>
+
+                                            <strong>Severity:</strong>
+                                            ${
+                                                properties.severity ||
+                                                "Unknown"
+                                            }
+                                            <br>
+
+                                            <strong>Urgency:</strong>
+                                            ${
+                                                properties.urgency ||
+                                                "Unknown"
+                                            }
+                                            <br>
+
+                                            <strong>Expires:</strong>
+                                            ${
+                                                formatAlertTime(
+                                                    properties.expires
+                                                )
+                                            }
+                                        `);
+                                    }
+                            }
+                        );
+
+                    alertLayer.addTo(
+                        warningsLayer
+                    );
+
+                    if (!feature.geometry) {
+                        zonePolygonCount++;
+                    }
+                }
+            );
+
+            console.log(
+                "[Sentinel] Live alert added:",
+                {
+                    event:
+                        eventName,
 
                     area:
                         properties.areaDesc,
 
-                    expires:
-                        properties.expires
+                    priority,
+
+                    distanceMiles:
+                        Number(
+                            measurement
+                                .distanceMiles
+                                .toFixed(1)
+                        ),
+
+                    direction:
+                        displayDirection,
+
+                    compassDirection:
+                        directionData
+                            .compassDirection,
+
+                    bearing:
+                        directionData.bearing,
+
+                    affectsCurrentLocation:
+                        measurement
+                            .affectsCurrentLocation,
+
+                    geometryCount:
+                        geometryFeatures.length
                 }
             );
         }
@@ -3655,7 +4458,7 @@ notificationManager.addAlert({
             "[Sentinel] NWS refresh complete:",
             {
                 alertsReturned:
-                    features.length,
+                    sentinelAlerts.length,
 
                 activeAlerts:
                     activeAlertCount,
@@ -3675,20 +4478,28 @@ notificationManager.addAlert({
         );
     } catch (error) {
         console.error(
-            "Unable to load NWS warnings:",
+            "[Sentinel] Unable to load NWS alerts:",
             error
         );
 
         notificationManager.addAlert({
-            id: "nws-refresh-error",
-            source: "NWS-System",
-            createdBy: "Sentinel",
+            id:
+                "nws-refresh-error",
+
+            source:
+                "NWS-System",
+
+            createdBy:
+                "Sentinel",
 
             title:
                 "NWS alert data unavailable",
 
-            priority: "low",
-            icon: "🔵"
+            priority:
+                "low",
+
+            icon:
+                "🔵"
         });
 
         updateAlertsPanel();
@@ -4210,6 +5021,44 @@ function getWarningStyle(
                 ? 0.18
                 : 0.35
     };
+}
+
+function zoomToGeometryFeatures(
+    geometryFeatures
+) {
+    if (
+        !radarMap ||
+        !Array.isArray(
+            geometryFeatures
+        ) ||
+        geometryFeatures.length === 0
+    ) {
+        return;
+    }
+
+    const geometryLayer =
+        L.geoJSON(
+            geometryFeatures
+        );
+
+    const bounds =
+        geometryLayer.getBounds();
+
+    if (!bounds.isValid()) {
+        console.warn(
+            "[Sentinel] Unable to zoom: invalid alert bounds."
+        );
+
+        return;
+    }
+
+    radarMap.fitBounds(
+        bounds,
+        {
+            padding: [40, 40],
+            animate: false
+        }
+    );
 }
 
 function formatAlertTime(timeString) {

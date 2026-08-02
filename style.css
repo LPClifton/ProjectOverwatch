@@ -642,6 +642,41 @@ body.map-open {
 }
 
 
+/* ==========================================
+   SENTINEL — CLICKABLE ALERT
+   ========================================== */
+
+.alert-zoom-link {
+    display: inline;
+    margin: 0;
+    padding: 0;
+
+    border: none;
+    background: transparent;
+
+    color: inherit;
+    font: inherit;
+    font-weight: inherit;
+    text-align: left;
+
+    cursor: pointer;
+
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+}
+
+.alert-zoom-link:hover,
+.alert-zoom-link:focus-visible {
+    text-decoration-thickness: 2px;
+}
+
+.alert-zoom-link:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 4px;
+    border-radius: 3px;
+}
+
 /* ================================
    System-Wide Alert Flash
 ================================ */
