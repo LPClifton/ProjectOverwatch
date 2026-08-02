@@ -47,3 +47,12 @@ Edits:
 Expected Result:
 • Alert zoom now reverses smoothly back to the vehicle.
 
+Version 0.5.2
+
+• Added tappable Sentinel alerts
+• Added alert inspection animation
+• Added automatic return to vehicle
+• Added automatic map scrolling on mobile
+• Fixed popup-induced map panning
+• Improved Sentinel inspection workflow
+
