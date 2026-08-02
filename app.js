@@ -5061,25 +5061,27 @@ function zoomToGeometryFeatures(
         return;
     }
 
-    const isMobilePortrait =
-        window.matchMedia(
-            "(max-width: 768px) and (orientation: portrait)"
-        ).matches;
-
     const mapPanelElement =
         document.getElementById(
             "map-panel"
         );
 
-    if (
-        isMobilePortrait &&
-        mapPanelElement
-    ) {
-        mapPanelElement.scrollIntoView({
-            behavior: "smooth",
-            block: "center"
-        });
-    }
+    const isFullscreen =
+        mapPanelElement?.classList.contains(
+            "fullscreen-map"
+        ) === true;
+
+    const isMobileLayout =
+        window.matchMedia(
+            "(max-width: 900px)"
+        ).matches;
+
+    const shouldScrollToMap =
+        isMobileLayout &&
+        !isFullscreen;
+
+    let accuracyCircleWasVisible =
+        false;
 
     if (
         accuracyCircle &&
@@ -5087,6 +5089,9 @@ function zoomToGeometryFeatures(
             accuracyCircle
         )
     ) {
+        accuracyCircleWasVisible =
+            true;
+
         radarMap.removeLayer(
             accuracyCircle
         );
@@ -5094,6 +5099,7 @@ function zoomToGeometryFeatures(
 
     function restoreAccuracyCircle() {
         if (
+            accuracyCircleWasVisible &&
             accuracyCircle &&
             !radarMap.hasLayer(
                 accuracyCircle
@@ -5138,7 +5144,9 @@ function zoomToGeometryFeatures(
             typeof radarMap.setBearing ===
             "function"
         ) {
-            radarMap.setBearing(0);
+            radarMap.setBearing(
+                0
+            );
         }
 
         restoreAccuracyCircle();
@@ -5169,22 +5177,22 @@ function zoomToGeometryFeatures(
             {
                 animate: true,
                 duration:
-                    isMobilePortrait
-                        ? 0.8
+                    isMobileLayout
+                        ? 0.9
                         : 1.1
             }
         );
 
         setTimeout(
             restoreMapOrientation,
-            isMobilePortrait
-                ? 850
+            isMobileLayout
+                ? 950
                 : 1150
         );
     }
 
     function beginReturnSequence() {
-        if (isMobilePortrait) {
+        if (isMobileLayout) {
             flyBackToVehicle();
             return;
         }
@@ -5210,69 +5218,107 @@ function zoomToGeometryFeatures(
         );
     }
 
-    function inspectAlert() {
-        if (isMobilePortrait) {
+    function beginAlertInspection() {
+        /*
+         * Scrolling can change the map's visible
+         * dimensions. Recalculate them before
+         * Leaflet centers the alert bounds.
+         */
+        radarMap.invalidateSize({
+            animate: false
+        });
+
+        if (isMobileLayout) {
             radarMap.flyToBounds(
                 bounds,
                 {
-                    padding: [24, 24],
+                    paddingTopLeft:
+                        [24, 24],
+
+                    paddingBottomRight:
+                        [24, 90],
+
                     animate: true,
-                    duration: 0.8,
+                    duration: 0.9,
                     maxZoom: 10
                 }
             );
-        } else {
-            const searchZoom =
-                Math.max(
-                    MIN_MAP_ZOOM,
-                    radarMap.getZoom() - 3
-                );
 
-            radarMap.flyTo(
-                radarMap.getCenter(),
-                searchZoom,
+            sentinelReturnTimer =
+                setTimeout(() => {
+                    beginReturnSequence();
+
+                    sentinelReturnTimer =
+                        null;
+                },
+                950 +
+                SENTINEL_ALERT_INSPECTION_MS
+            );
+
+            return;
+        }
+
+        const outboundSearchZoom =
+            Math.max(
+                MIN_MAP_ZOOM,
+                radarMap.getZoom() - 3
+            );
+
+        radarMap.flyTo(
+            radarMap.getCenter(),
+            outboundSearchZoom,
+            {
+                animate: true,
+                duration: 0.7
+            }
+        );
+
+        setTimeout(() => {
+            radarMap.flyToBounds(
+                bounds,
                 {
+                    padding: [40, 40],
                     animate: true,
-                    duration: 0.7
+                    duration: 1.1,
+                    maxZoom: 11
                 }
             );
 
-            setTimeout(() => {
-                radarMap.flyToBounds(
-                    bounds,
-                    {
-                        padding: [40, 40],
-                        animate: true,
-                        duration: 1.1,
-                        maxZoom: 11
-                    }
-                );
-            }, 750);
-        }
+            sentinelReturnTimer =
+                setTimeout(() => {
+                    beginReturnSequence();
 
-        const outboundDurationMs =
-            isMobilePortrait
-                ? 850
-                : 1900;
-
-        sentinelReturnTimer =
-            setTimeout(() => {
-                beginReturnSequence();
-
-                sentinelReturnTimer =
-                    null;
-            },
-            SENTINEL_ALERT_INSPECTION_MS +
-                outboundDurationMs
-        );
+                    sentinelReturnTimer =
+                        null;
+                },
+                1150 +
+                SENTINEL_ALERT_INSPECTION_MS
+            );
+        }, 750);
     }
 
-    setTimeout(
-        inspectAlert,
-        isMobilePortrait
-            ? 450
-            : 0
-    );
+    if (
+        shouldScrollToMap &&
+        mapPanelElement
+    ) {
+        mapPanelElement.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+            inline: "nearest"
+        });
+
+        /*
+         * Allow the page scroll and mobile
+         * layout to settle before measuring
+         * and animating the Leaflet map.
+         */
+        setTimeout(
+            beginAlertInspection,
+            650
+        );
+    } else {
+        beginAlertInspection();
+    }
 }
 
 function formatAlertTime(timeString) {
