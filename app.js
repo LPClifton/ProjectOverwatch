@@ -5071,14 +5071,15 @@ function zoomToGeometryFeatures(
             "fullscreen-map"
         ) === true;
 
-    const isMobileLayout =
+    const isMobilePortrait =
         window.matchMedia(
-            "(max-width: 900px)"
+            "(max-width: 768px) and (orientation: portrait)"
         ).matches;
 
-    const shouldScrollToMap =
-        isMobileLayout &&
-        !isFullscreen;
+    const isMobileLandscape =
+        window.matchMedia(
+            "(max-width: 900px) and (orientation: landscape)"
+        ).matches;
 
     let accuracyCircleWasVisible =
         false;
@@ -5098,7 +5099,10 @@ function zoomToGeometryFeatures(
     }
 
     function restoreAccuracyCircle() {
-        if (!accuracyCircle) {
+        if (
+            !accuracyCircleWasVisible ||
+            !accuracyCircle
+        ) {
             return;
         }
 
@@ -5158,7 +5162,7 @@ function zoomToGeometryFeatures(
             }
         } else if (
             typeof radarMap.setBearing ===
-            "function"
+                "function"
         ) {
             radarMap.setBearing(
                 0
@@ -5174,6 +5178,7 @@ function zoomToGeometryFeatures(
             currentLongitude === null
         ) {
             restoreAccuracyCircle();
+
             return;
         }
 
@@ -5193,23 +5198,28 @@ function zoomToGeometryFeatures(
             {
                 animate: true,
                 duration:
-                    isMobileLayout
-                        ? 0.9
+                    isMobilePortrait
+                        ? 0.8
                         : 1.1
             }
         );
 
         setTimeout(
             restoreMapOrientation,
-            isMobileLayout
-                ? 950
+            isMobilePortrait
+                ? 850
                 : 1150
         );
     }
 
     function beginReturnSequence() {
-        if (isMobileLayout) {
+        /*
+         * Portrait uses one direct return flight
+         * to avoid excessive movement.
+         */
+        if (isMobilePortrait) {
             flyBackToVehicle();
+
             return;
         }
 
@@ -5236,26 +5246,30 @@ function zoomToGeometryFeatures(
 
     function beginAlertInspection() {
         /*
-         * Scrolling can change the map's visible
-         * dimensions. Recalculate them before
-         * Leaflet centers the alert bounds.
+         * Scrolling or rotating the device can
+         * change the map dimensions. Recalculate
+         * before positioning the alert.
          */
         radarMap.invalidateSize({
             animate: false
         });
 
-        if (isMobileLayout) {
-            radarMap.flyToBounds(
+        /*
+         * Portrait:
+         * Center the full alert immediately.
+         * Avoid competing page and map animations.
+         */
+        if (isMobilePortrait) {
+            radarMap.fitBounds(
                 bounds,
                 {
                     paddingTopLeft:
-                        [24, 24],
+                        [20, 20],
 
                     paddingBottomRight:
-                        [24, 90],
+                        [20, 70],
 
-                    animate: true,
-                    duration: 0.9,
+                    animate: false,
                     maxZoom: 10
                 }
             );
@@ -5267,13 +5281,17 @@ function zoomToGeometryFeatures(
                     sentinelReturnTimer =
                         null;
                 },
-                950 +
                 SENTINEL_ALERT_INSPECTION_MS
             );
 
             return;
         }
 
+        /*
+         * Landscape and desktop:
+         * Preserve the cinematic two-stage
+         * inspection sequence.
+         */
         const outboundSearchZoom =
             Math.max(
                 MIN_MAP_ZOOM,
@@ -5293,10 +5311,21 @@ function zoomToGeometryFeatures(
             radarMap.flyToBounds(
                 bounds,
                 {
-                    padding: [40, 40],
+                    padding:
+                        isMobileLandscape
+                            ? [24, 24]
+                            : [40, 40],
+
                     animate: true,
-                    duration: 1.1,
-                    maxZoom: 11
+                    duration:
+                        isMobileLandscape
+                            ? 0.9
+                            : 1.1,
+
+                    maxZoom:
+                        isMobileLandscape
+                            ? 10
+                            : 11
                 }
             );
 
@@ -5313,9 +5342,17 @@ function zoomToGeometryFeatures(
         }, 750);
     }
 
+    /*
+     * In tile view, bring the map into view
+     * before starting Sentinel inspection.
+     */
     if (
-        shouldScrollToMap &&
-        mapPanelElement
+        !isFullscreen &&
+        mapPanelElement &&
+        (
+            isMobilePortrait ||
+            isMobileLandscape
+        )
     ) {
         mapPanelElement.scrollIntoView({
             behavior: "smooth",
@@ -5323,18 +5360,17 @@ function zoomToGeometryFeatures(
             inline: "nearest"
         });
 
-        /*
-         * Allow the page scroll and mobile
-         * layout to settle before measuring
-         * and animating the Leaflet map.
-         */
         setTimeout(
             beginAlertInspection,
-            650
+            isMobilePortrait
+                ? 700
+                : 500
         );
-    } else {
-        beginAlertInspection();
+
+        return;
     }
+
+    beginAlertInspection();
 }
 
 function formatAlertTime(timeString) {
