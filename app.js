@@ -5213,36 +5213,41 @@ function zoomToGeometryFeatures(
     }
 
     function beginReturnSequence() {
-        /*
-         * Portrait uses one direct return flight
-         * to avoid excessive movement.
-         */
-        if (isMobilePortrait) {
-            flyBackToVehicle();
+    const returnSearchZoom =
+        Math.max(
+            MIN_MAP_ZOOM,
+            radarMap.getZoom() - 3
+        );
 
-            return;
+    /*
+     * Return stage 1:
+     * Pull back while remaining centered on
+     * the alert area.
+     */
+    radarMap.flyTo(
+        radarMap.getCenter(),
+        returnSearchZoom,
+        {
+            animate: true,
+            duration:
+                isMobilePortrait
+                    ? 0.6
+                    : 0.7
         }
+    );
 
-        const returnSearchZoom =
-            Math.max(
-                MIN_MAP_ZOOM,
-                radarMap.getZoom() - 3
-            );
-
-        radarMap.flyTo(
-            radarMap.getCenter(),
-            returnSearchZoom,
-            {
-                animate: true,
-                duration: 0.7
-            }
-        );
-
-        setTimeout(
-            flyBackToVehicle,
-            750
-        );
-    }
+    /*
+     * Return stage 2:
+     * After the pullback completes, fly back
+     * to the vehicle and restore its zoom.
+     */
+    setTimeout(
+        flyBackToVehicle,
+        isMobilePortrait
+            ? 650
+            : 750
+    );
+}
 
     function beginAlertInspection() {
         /*
