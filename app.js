@@ -2767,20 +2767,24 @@ function initializeMap() {
                 }
 
                 if (!locationMarker) {
-                    locationMarker = L.marker(
-                        [latitude, longitude],
-                        {
-                            icon: stationaryLocationIcon
-                        }
-                    )
-                        .addTo(radarMap)
-                        .bindPopup("Project Overwatch")
-                        .openPopup();
+    locationMarker = L.marker(
+        [latitude, longitude],
+        {
+            icon: stationaryLocationIcon
+        }
+    ).addTo(
+        radarMap
+    );
 
-                    radarMap.setView([latitude, longitude], 15);
-                } else {
-                    locationMarker.setLatLng([latitude, longitude]);
-                }
+    radarMap.setView(
+        [latitude, longitude],
+        15
+    );
+} else {
+    locationMarker.setLatLng(
+        [latitude, longitude]
+    );
+}
 
                 updateOperatingMode();
 
