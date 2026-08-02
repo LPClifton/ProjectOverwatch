@@ -314,12 +314,64 @@ body.map-open {
 
 #map-controls {
     display: flex;
+    flex-direction: column;
+    gap: 10px;
+
+    width: 100%;
+    margin-top: 8px;
+}
+
+/*
+ * Row 1:
+ * Time, radar freshness, and radar toggle.
+ */
+#radar-status-row {
+    display: grid;
+    grid-template-columns:
+        auto
+        minmax(0, 1fr)
+        auto;
+    align-items: stretch;
+    gap: 10px;
+
+    width: 100%;
+}
+
+/*
+ * Row 2:
+ * Previous, Play, Next, Zoom,
+ * Fullscreen, and Export.
+ */
+#radar-action-row {
+    display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    
-    margin-top: 8px;
+    gap: 14px;
+
+    width: 100%;
+    max-height: 80px;
+
+    opacity: 1;
+    visibility: visible;
+    overflow: hidden;
+
+    transition:
+        max-height 0.3s ease,
+        opacity 0.2s ease,
+        visibility 0.2s ease,
+        transform 0.3s ease;
+}
+
+#map-controls.radar-controls-collapsed
+#radar-action-row {
+    max-height: 0;
+
+    opacity: 0;
+    visibility: hidden;
+
+    pointer-events: none;
+
+    transform: translateY(-8px);
 }
 
 #radar-controls,
@@ -330,51 +382,41 @@ body.map-open {
     gap: 10px;
 }
 
-#radar-controls {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
+/*
+ * Keep a little separation between the
+ * playback controls and map utilities.
+ */
+#map-utility-controls {
+    padding-left: 14px;
 
-    max-width: 1000px;
-
-    opacity: 1;
-    visibility: visible;
-
-    overflow: hidden;
-
-    transition:
-        max-width 0.3s ease,
-        opacity 0.2s ease,
-        visibility 0.2s ease,
-        transform 0.3s ease;
-}
-
-#radar-controls.radar-controls-collapsed {
-    max-width: 0;
-
-    opacity: 0;
-    visibility: hidden;
-
-    pointer-events: none;
-
-    transform: scaleX(0.85);
+    border-left:
+        1px solid
+        rgba(79, 213, 255, 0.28);
 }
 
 #toggle-radar-controls {
+    width: 58px;
+    min-width: 58px;
+    height: auto;
+    min-height: 44px;
+
     flex-shrink: 0;
+
+    border-radius: 8px;
 }
 
 #toggle-radar-controls[aria-expanded="true"] {
-    background: rgba(79, 213, 255, 0.2);
-    border-color: #4fd5ff;
+    background:
+        rgba(79, 213, 255, 0.20);
+
+    border-color:
+        var(--system-accent);
 }
 
-#map-panel.fullscreen-map
-#radar-controls {
-    max-width: 1000px;
-}
-
+/*
+ * General circular map-control buttons.
+ * The radar toggle is overridden above.
+ */
 #map-controls button {
     width: 44px;
     height: 44px;
@@ -385,17 +427,26 @@ body.map-open {
 
     padding: 0;
 
-    border: 1px solid var(--system-accent);
+    border:
+        1px solid
+        var(--system-accent);
+
     border-radius: 50%;
 
-    background: rgba(5, 9, 13, 0.72);
-    color: var(--system-accent);
+    background:
+        rgba(5, 9, 13, 0.72);
+
+    color:
+        var(--system-accent);
 
     font-size: 19px;
     cursor: pointer;
 
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter:
+        blur(8px);
+
+    -webkit-backdrop-filter:
+        blur(8px);
 
     transition:
         background 0.2s ease,
@@ -404,55 +455,129 @@ body.map-open {
         color 0.2s ease;
 }
 
+/*
+ * Override the general circular shape so the
+ * radar toggle matches the Time box.
+ */
+#map-controls
+#toggle-radar-controls {
+    width: 58px;
+    height: auto;
+    min-height: 44px;
+
+    border-radius: 8px;
+}
+
 #map-controls button:hover {
-    background: rgba(79, 213, 255, 0.18);
-    border-color: #4fd5ff;
+    background:
+        rgba(79, 213, 255, 0.18);
+
+    border-color:
+        #4fd5ff;
 }
 
 #map-controls button:active {
-    transform: scale(0.92);
+    transform:
+        scale(0.92);
+}
+
+/*
+ * Fullscreen keeps both control rows visible.
+ */
+#map-panel.fullscreen-map
+#radar-action-row {
+    max-height: 80px;
+
+    opacity: 1;
+    visibility: visible;
+
+    pointer-events: auto;
+
+    transform: none;
 }
 
 @media screen and (max-width: 900px) {
-    #radar-controls {
-        flex-wrap: wrap;
+    #radar-status-row {
+        grid-template-columns:
+            auto
+            minmax(0, 1fr)
+            auto;
+    }
+
+    #radar-action-row {
+        gap: 10px;
+    }
+
+    #radar-controls,
+    #map-utility-controls {
+        gap: 8px;
+    }
+
+    #map-utility-controls {
+        padding-left: 10px;
+    }
+
+    #map-controls button {
+        width: 42px;
+        height: 42px;
+    }
+
+    #map-controls
+    #toggle-radar-controls {
+        width: 58px;
+        height: auto;
+        min-height: 42px;
+    }
+}
+
+@media screen and (max-width: 430px) {
+    #radar-action-row {
+        gap: 8px;
+    }
+
+    #radar-controls,
+    #map-utility-controls {
+        gap: 6px;
+    }
+
+    #map-utility-controls {
+        padding-left: 8px;
+    }
+
+    #map-controls button {
+        width: 40px;
+        height: 40px;
+        font-size: 17px;
+    }
+
+    #map-controls
+    #toggle-radar-controls {
+        width: 54px;
+        height: auto;
+        min-height: 40px;
     }
 
     #radar-controls.radar-controls-collapsed {
         max-width: 0;
         max-height: 0;
     }
-}
 
+}
 
 #radar-timestamp {
     position: static;
 
     padding: 8px 12px;
 
-    border: 1px solid rgba(79, 213, 255, 0.45);
+    border:
+        1px solid
+        var(--system-accent);
+
     border-radius: 8px;
 
-    background: rgba(5, 9, 13, 0.72);
-    color: #d9f7ff;
+    background:
+        rgba(5, 9, 13, 0.72);
 
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: 0.4px;
-
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-}
-
-#radar-freshness {
-    position: static;
-
-    padding: 8px 12px;
-
-    border: 1px solid rgba(79, 213, 255, 0.45);
-    border-radius: 8px;
-
-    background: rgba(5, 9, 13, 0.72);
     color: #d9f7ff;
 
     font-size: 14px;
@@ -463,18 +588,50 @@ body.map-open {
     -webkit-backdrop-filter: blur(8px);
 
     transition:
+        border-color 0.25s ease,
         color 0.25s ease,
         opacity 0.25s ease,
         text-shadow 0.25s ease;
 }
 
 #radar-freshness {
+    position: static;
+
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
 
     gap: 2px;
+
+    padding: 8px 12px;
+
+    border:
+        1px solid
+        var(
+            --radar-freshness-border,
+            var(--system-accent)
+        );
+
+    border-radius: 8px;
+
+    background:
+        rgba(5, 9, 13, 0.72);
+
+    color: #d9f7ff;
+
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+
+    transition:
+        border-color 0.25s ease,
+        color 0.25s ease,
+        opacity 0.25s ease,
+        text-shadow 0.25s ease;
 }
 
 .radar-freshness-primary {
@@ -488,13 +645,108 @@ body.map-open {
 .radar-freshness-secondary {
     display: block;
 
-    color: rgba(217, 247, 255, 0.7);
+    color:
+        rgba(217, 247, 255, 0.7);
 
     font-size: 11px;
     font-weight: 500;
     line-height: 1.2;
     letter-spacing: 0.2px;
 }
+
+#radar-freshness.radar-fresh {
+    --radar-freshness-border:
+        #7dff9b;
+
+    color: #7dff9b;
+}
+
+#radar-freshness.radar-aging {
+    --radar-freshness-border:
+        #ffd45c;
+
+    color: #ffd45c;
+}
+
+#radar-freshness.radar-stale {
+    --radar-freshness-border:
+        #ff9f43;
+
+    color: #ff9f43;
+}
+
+#radar-freshness.radar-unavailable {
+    --radar-freshness-border:
+        #ff5c5c;
+
+    color: #ff5c5c;
+}
+
+#radar-freshness.radar-refreshing {
+    --radar-freshness-border:
+        #4fd5ff;
+
+    color: #4fd5ff;
+
+    animation:
+        radar-status-pulse
+        1.2s ease-in-out
+        infinite;
+}
+
+/* Compact layers menu for wide landscape screens */
+@media screen and (orientation: landscape) {
+    #map-panel.fullscreen-map
+    .leaflet-control-layers-expanded {
+        max-width: 240px;
+        max-height: calc(100vh - 32px);
+        overflow-y: auto;
+        font-size: 14px;
+    }
+
+    #map-panel.fullscreen-map
+    .leaflet-control-layers-toggle {
+        width: 42px;
+        height: 42px;
+        background-size: 24px 24px;
+    }
+}
+
+
+/* ================================
+   Radar Status Priority Colors
+================================ */
+
+#radar-status-row {
+    --radar-status-border:
+        var(--system-accent);
+}
+
+#radar-status-row.priority-normal,
+#radar-status-row.priority-low {
+    --radar-status-border:
+        var(--system-accent);
+}
+
+#radar-status-row.priority-medium {
+    --radar-status-border:
+        #ffd400;
+}
+
+#radar-status-row.priority-high {
+    --radar-status-border:
+        #f59e0b;
+}
+
+#radar-status-row.priority-critical {
+    --radar-status-border:
+        #ef4444;
+}
+
+/*
+ * Radar freshness controls its text color.
+ * Alert priority controls the box outline.
+ */
 
 #radar-freshness.radar-fresh {
     color: #7dff9b;
@@ -521,23 +773,6 @@ body.map-open {
         infinite;
 }
 
-/* Compact layers menu for wide landscape screens */
-@media screen and (orientation: landscape) {
-    #map-panel.fullscreen-map
-    .leaflet-control-layers-expanded {
-        max-width: 240px;
-        max-height: calc(100vh - 32px);
-        overflow-y: auto;
-        font-size: 14px;
-    }
-
-    #map-panel.fullscreen-map
-    .leaflet-control-layers-toggle {
-        width: 42px;
-        height: 42px;
-        background-size: 24px 24px;
-    }
-}
 
 /* ================================
     Map Marker Icons

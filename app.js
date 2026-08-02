@@ -874,7 +874,7 @@ const radarControlsVisibilityManager = {
 
     getControls() {
         return document.getElementById(
-            "radar-controls"
+            "map-controls"
         );
     },
 
@@ -1310,6 +1310,31 @@ function getAlertColor(priority) {
     );
 }
 
+function updateRadarStatusBorderPriority(
+    alertPriority = "normal"
+) {
+    const radarStatusRow =
+        document.getElementById(
+            "radar-status-row"
+        );
+
+    if (!radarStatusRow) {
+        return;
+    }
+
+    radarStatusRow.classList.remove(
+        "priority-normal",
+        "priority-low",
+        "priority-medium",
+        "priority-high",
+        "priority-critical"
+    );
+
+    radarStatusRow.classList.add(
+        `priority-${alertPriority}`
+    );
+}
+
 function updateAlertsPanel() {
     const alertsHeading =
         document.getElementById(
@@ -1371,16 +1396,19 @@ function updateAlertsPanel() {
             "alert-clear"
         );
 
+        updateRadarStatusBorderPriority(
+            "normal"    
+        );
+
         alertsStatus.textContent =
             "🟢 All Clear";
 
-        /*
-         * Remove Sentinel from the Context Bar.
-         * The next-highest system message, such
-         * as GPS Locked, will become visible.
-         */
         contextManager.clearStatus(
             "sentinel"
+        );
+
+        updateRadarStatusBorderPriority(
+            "normal"
         );
 
         return;
@@ -1394,8 +1422,8 @@ function updateAlertsPanel() {
     };
 
     /*
-     * Refresh each alert's current relevance
-     * score before ranking the alert list.
+     * Refresh each alert's relevance score
+     * before ranking the active alerts.
      */
     alerts.forEach(alert => {
         if (
@@ -1455,10 +1483,7 @@ function updateAlertsPanel() {
                         : 0;
 
                 if (scoreB !== scoreA) {
-                    return (
-                        scoreB -
-                        scoreA
-                    );
+                    return scoreB - scoreA;
                 }
 
                 const priorityA =
@@ -1486,9 +1511,7 @@ function updateAlertsPanel() {
                 if (
                     priorityDifference !== 0
                 ) {
-                    return (
-                        priorityDifference
-                    );
+                    return priorityDifference;
                 }
 
                 const distanceA =
@@ -1505,10 +1528,7 @@ function updateAlertsPanel() {
                         ? alertB.distance
                         : Infinity;
 
-                return (
-                    distanceA -
-                    distanceB
-                );
+                return distanceA - distanceB;
             }
         )[0];
 
@@ -1516,6 +1536,10 @@ function updateAlertsPanel() {
         highestAlert.priority ||
         highestAlert.severity ||
         "low";
+
+    updateRadarStatusBorderPriority(
+        alertPriority
+    );    
 
     switch (alertPriority) {
         case "critical":
@@ -1584,14 +1608,13 @@ function updateAlertsPanel() {
         "Active Alert";
 
     let alertDetails = "";
-
     let contextDetail = "";
 
     if (
         highestAlert
             .affectsCurrentLocation === true
     ) {
-        alertDetails +=
+        alertDetails =
             " — Current Location";
 
         contextDetail =
@@ -1628,11 +1651,6 @@ function updateAlertsPanel() {
         }
     }
 
-    /*
-     * Publish the highest-ranked Sentinel alert
-     * to the Context Bar. Its priority now
-     * controls both the text and border class.
-     */
     contextManager.setStatus({
         source: "sentinel",
         priority:

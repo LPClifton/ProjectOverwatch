@@ -75,83 +75,95 @@
                     Initializing map...
                 </p>
 
-            <div id="map-controls">
+             <div
+    id="map-controls"
+    class="radar-controls-collapsed"
+>
+    <div id="radar-status-row">
 
-                <button
-                    id="toggle-radar-controls"
-                    type="button"
-                aria-label="Radar controls"
-                title="Radar controls"
+        <span id="radar-timestamp">
+            Loading...
+        </span>
+
+        <span id="radar-freshness">
+            Checking radar...
+        </span>
+
+        <button
+            id="toggle-radar-controls"
+            type="button"
+            aria-label="Show radar controls"
+            aria-expanded="false"
+            title="Show radar controls"
+        >
+            🌧️
+        </button>
+
+    </div>
+
+    <div id="radar-action-row">
+
+        <div id="radar-controls">
+
+            <button
+                id="radar-prev"
+                type="button"
+                aria-label="Previous radar frame"
+                title="Previous radar frame"
             >
-                🌧️
+                ⏮️
             </button>
 
-            <div id="radar-controls">
+            <button
+                id="radar-play"
+                type="button"
+                aria-label="Pause radar animation"
+                title="Pause radar animation"
+            >
+                ⏸️
+            </button>
 
-                <span id="radar-timestamp">
-                    Loading...
+            <button
+                id="radar-next"
+                type="button"
+                aria-label="Next radar frame"
+                title="Next radar frame"
+            >
+                ⏭️
+            </button>
+
+        </div>
+
+        <div id="map-utility-controls">
+
+            <span id="map-zoom-level">
+                Z--
+            </span>
+
+            <button
+                id="expand-map-btn"
+                type="button"
+                aria-label="Expand map"
+                title="Expand map"
+            >
+                <span class="fullscreen-icon">
+                    ⛶
                 </span>
+            </button>
 
-                <span id="radar-freshness">
-                    Checking radar...
-                </span>
+            <button
+                id="export-log-btn"
+                type="button"
+                aria-label="Export diagnostics"
+                title="Export diagnostics"
+            >
+                📝
+            </button>
 
-                <button
-                    id="radar-prev"
-                    type="button"
-                    aria-label="Previous radar frame"
-                >
-                    ⏮️
-                </button>
+        </div>
 
-                <button
-                    id="radar-play"
-                    type="button"
-                    aria-label="Pause radar animation"
-                >
-                 ⏸️
-                </button>
-
-                <button
-                    id="radar-next"
-                    type="button"
-                    aria-label="Next radar frame"
-                >
-                    ⏭️
-                </button>
-
-            </div>
-
-            <div id="map-utility-controls">
-
-                <span id="map-zoom-level">
-                    Z--
-                </span>
-
-                <button
-                    id="expand-map-btn"
-                    type="button"
-                    aria-label="Expand map"
-                    title="Expand map"
-                >
-                    <span class="fullscreen-icon">
-                        ⛶
-                    </span>
-                </button>
-
-                <button
-                    id="export-log-btn"
-                    type="button"
-                    aria-label="Export diagnostics"
-                    title="Export diagnostics"
-                >
-                    📝
-                </button>
-
-            </div>
-
-        </div>    
-            </div>    
+    </div>
+</div>  
         </section>
 
         <section class="panel">
