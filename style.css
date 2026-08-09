@@ -244,9 +244,10 @@ body.map-open {
     position: fixed;
     inset: 0;
 
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh;
+    width: auto;
+    height: auto;
+
+    box-sizing: border-box;
 
     margin: 0;
     padding: 0;
