@@ -1562,3 +1562,46 @@ body.map-open {
         opacity: 1 !important;
     }
 }
+
+@media screen and
+       (orientation: landscape) and
+       (max-height: 500px) {
+
+    #map-panel.fullscreen-map #map-controls {
+        left: 12px !important;
+        right: auto !important;
+
+        width: calc(100% - 24px) !important;
+        max-width: calc(100% - 24px) !important;
+
+        box-sizing: border-box !important;
+
+        transform: none !important;
+    }
+
+    #map-panel.fullscreen-map #radar-status-row {
+        width: 100%;
+        min-width: 0;
+
+        grid-template-columns:
+            auto
+            minmax(0, 1fr)
+            50px;
+    }
+
+    #map-panel.fullscreen-map #radar-freshness {
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    #map-panel.fullscreen-map #toggle-radar-controls {
+        display: flex !important;
+
+        width: 50px !important;
+        min-width: 50px !important;
+        max-width: 50px !important;
+
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+}
