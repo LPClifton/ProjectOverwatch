@@ -39,12 +39,18 @@ const RADAR_STATUS_UPDATE_INTERVAL_MS =
     30 * 1000;
 
 const RADAR_FADE_DURATION = 850
-const RADAR_LAYER_CLEANUP_DELAY = 
+const RADAR_LAYER_CLEANUP_DELAY =
     RADAR_FADE_DURATION + 100;
 const MIN_MAP_ZOOM = 5;
 const MIN_ANIMATED_RADAR_ZOOM = 8;
 const RADAR_REFRESH_INTERVAL_MS =
     5 * 60 * 1000;
+
+const RADAR_PLAYBACK_MODES = {
+    PAST: "PAST",
+    FORECAST: "FORECAST",
+    COMBINED: "COMBINED"
+};
 
 
 const SENTINEL_RADIUS_MILES = 250;
@@ -154,7 +160,14 @@ let previousWeatherRadar;
 let lightningLayer;
 let warningsLayer;
 let layerControl;
+let observedRadarFrames = [];
+let forecastRadarFrames = [];
+
 let radarFrames = [];
+
+let radarPlaybackMode =
+    RADAR_PLAYBACK_MODES.COMBINED;
+
 let currentRadarFrame = 0;
 let radarAnimationTimer = null;
 let radarIsPlaying = true;
@@ -198,38 +211,38 @@ function determineOperatingMode() {
 
     if (operatingMode === OPERATING_MODES.DRIVING) {
 
-    if (currentSpeedMph >= 2) {
+        if (currentSpeedMph >= 2) {
 
-    if (drivingStopStartTime !== null) {
-        diagnosticLog("Operating Mode", {
-            event: "Driving stop timer reset",
-            currentSpeedMph
-        });
+            if (drivingStopStartTime !== null) {
+                diagnosticLog("Operating Mode", {
+                    event: "Driving stop timer reset",
+                    currentSpeedMph
+                });
+            }
+
+            drivingStopStartTime = null;
+
+            return OPERATING_MODES.DRIVING;
+        }
+
+        if (drivingStopStartTime === null) {
+            drivingStopStartTime = Date.now();
+
+            diagnosticLog("Operating Mode", {
+                event: "Driving stop timer started",
+                currentSpeedMph
+            });
+        }
+
+        const stoppedDuration =
+            Date.now() - drivingStopStartTime;
+
+        if (stoppedDuration < PARKED_DELAY_MS) {
+            return OPERATING_MODES.DRIVING;
+        }
+
+        drivingStopStartTime = null;
     }
-
-    drivingStopStartTime = null;
-
-    return OPERATING_MODES.DRIVING;
-}
-
-    if (drivingStopStartTime === null) {
-    drivingStopStartTime = Date.now();
-
-    diagnosticLog("Operating Mode", {
-        event: "Driving stop timer started",
-        currentSpeedMph
-    });
-}
-
-    const stoppedDuration =
-        Date.now() - drivingStopStartTime;
-
-    if (stoppedDuration < PARKED_DELAY_MS) {
-        return OPERATING_MODES.DRIVING;
-    }
-
-    drivingStopStartTime = null;
-}
 
     return OPERATING_MODES.PARKED;
 }
@@ -246,6 +259,9 @@ function updateOperatingMode() {
     }
 
     operatingMode = newOperatingMode;
+
+    navigationIntelligenceManager.mode =
+    operatingMode;
 
     console.log(
         "Operating mode changed:",
@@ -269,9 +285,9 @@ function updateOperatingMode() {
     updateMovementIcon();
 
     radarControlsVisibilityManager
-    .setOperatingMode(
-        operatingMode
-    );
+        .setOperatingMode(
+            operatingMode
+        );
 
     if (
         operatingMode ===
@@ -280,9 +296,9 @@ function updateOperatingMode() {
         applyParkedMapState();
     } else {
         updateNavigationDisplay();
-}
+    }
 
-updateSystemStatus();
+    updateSystemStatus();
 }
 
 
@@ -354,12 +370,12 @@ const contextManager = {
                 (messageA, messageB) => {
                     const priorityA =
                         priorityOrder[
-                            messageA.priority
+                        messageA.priority
                         ] || 0;
 
                     const priorityB =
                         priorityOrder[
-                            messageB.priority
+                        messageB.priority
                         ] || 0;
 
                     return (
@@ -675,7 +691,7 @@ function updateRadarFreshnessDisplay() {
         lastRadarRefreshTime === null
             ? null
             : Date.now() -
-                lastRadarRefreshTime;
+            lastRadarRefreshTime;
 
     const formattedCheckAge =
         formatRadarCheckAge(
@@ -819,7 +835,7 @@ const navigationIntelligenceManager = {
         this.averageSpeedMph =
             this.speedSamples.length > 0
                 ? totalSpeed /
-                  this.speedSamples.length
+                this.speedSamples.length
                 : speedMph;
 
         this.targetZoom =
@@ -827,7 +843,7 @@ const navigationIntelligenceManager = {
                 this.averageSpeedMph
             );
 
-        this.mode = determineOperatingMode();
+            this.mode = operatingMode;
 
         console.log("[Navigation]", {
             currentSpeedMph:
@@ -849,57 +865,57 @@ const navigationIntelligenceManager = {
         });
     },
 
-updateHeading(rawHeading, speedMph) {
-    if (
-        rawHeading == null ||
-        speedMph < MIN_HEADING_SPEED_MPH
-    ) {
-        return this.smoothedHeading;
-    }
+    updateHeading(rawHeading, speedMph) {
+        if (
+            rawHeading == null ||
+            speedMph < MIN_HEADING_SPEED_MPH
+        ) {
+            return this.smoothedHeading;
+        }
 
-    const now = Date.now();
+        const now = Date.now();
 
-    this.headingSamples.push({
-        heading: rawHeading,
-        timestamp: now
-    });
-
-    this.headingSamples =
-        this.headingSamples.filter(sample => {
-            return (
-                now - sample.timestamp <=
-                this.headingSampleWindowMs
-            );
+        this.headingSamples.push({
+            heading: rawHeading,
+            timestamp: now
         });
 
-    let sineTotal = 0;
-    let cosineTotal = 0;
+        this.headingSamples =
+            this.headingSamples.filter(sample => {
+                return (
+                    now - sample.timestamp <=
+                    this.headingSampleWindowMs
+                );
+            });
 
-    this.headingSamples.forEach(sample => {
-        const radians =
-            sample.heading * Math.PI / 180;
+        let sineTotal = 0;
+        let cosineTotal = 0;
 
-        sineTotal += Math.sin(radians);
-        cosineTotal += Math.cos(radians);
-    });
+        this.headingSamples.forEach(sample => {
+            const radians =
+                sample.heading * Math.PI / 180;
 
-    const averageRadians =
-        Math.atan2(
-            sineTotal / this.headingSamples.length,
-            cosineTotal / this.headingSamples.length
-        );
+            sineTotal += Math.sin(radians);
+            cosineTotal += Math.cos(radians);
+        });
 
-    let averageDegrees =
-        averageRadians * 180 / Math.PI;
+        const averageRadians =
+            Math.atan2(
+                sineTotal / this.headingSamples.length,
+                cosineTotal / this.headingSamples.length
+            );
 
-    if (averageDegrees < 0) {
-        averageDegrees += 360;
+        let averageDegrees =
+            averageRadians * 180 / Math.PI;
+
+        if (averageDegrees < 0) {
+            averageDegrees += 360;
+        }
+
+        this.smoothedHeading = averageDegrees;
+
+        return this.smoothedHeading;
     }
-
-    this.smoothedHeading = averageDegrees;
-
-    return this.smoothedHeading;
-}
 }
 
 // =============================
@@ -964,7 +980,7 @@ const radarControlsVisibilityManager = {
         }
 
         const shouldShow =
-    this.isExpanded;
+            this.isExpanded;
 
         radarControls.classList.toggle(
             "radar-controls-collapsed",
@@ -1009,15 +1025,15 @@ const radarControlsVisibilityManager = {
 
     toggle() {
         if (this.isFullscreen()) {
-        const mapControls =
-            this.getControls();
+            const mapControls =
+                this.getControls();
 
-        mapControls?.classList.add(
-            "map-controls-hidden"
-        );
+            mapControls?.classList.add(
+                "map-controls-hidden"
+            );
 
-        return;
-    }
+            return;
+        }
 
         this.isExpanded =
             !this.isExpanded;
@@ -1253,7 +1269,7 @@ const notificationManager = {
         updateAlertsPanel();
 
         initializedAlertSources.add(source);
-    },  
+    },
 
     getAlertColor(priority) {
         switch (priority) {
@@ -1270,47 +1286,47 @@ const notificationManager = {
                 return DEFAULT_SYSTEM_ACCENT;
         }
     },
-    
+
     addAlert(alert) {
-    const existingAlert =
-        this.alerts.find(
-            existing =>
-                existing.id === alert.id
-        );
-
-    if (existingAlert) {
-        Object.assign(
-            existingAlert,
-            alert
-        );
-
-        existingAlert._syncSeen = true;
-    } else {
-        alert._syncSeen = true;
-
-        this.alerts.push(alert);
-
-        console.log(
-            "🚨 New Alert:",
-            alert.title ||
-            alert.event
-        );
-
-        const alertColor =
-            this.getAlertColor(
-                alert.priority
+        const existingAlert =
+            this.alerts.find(
+                existing =>
+                    existing.id === alert.id
             );
 
-        flashSystemAccent(
-            alertColor
-        );
-    }
+        if (existingAlert) {
+            Object.assign(
+                existingAlert,
+                alert
+            );
 
-    updateAlertsPanel();
-},
+            existingAlert._syncSeen = true;
+        } else {
+            alert._syncSeen = true;
 
-    
-    
+            this.alerts.push(alert);
+
+            console.log(
+                "🚨 New Alert:",
+                alert.title ||
+                alert.event
+            );
+
+            const alertColor =
+                this.getAlertColor(
+                    alert.priority
+                );
+
+            flashSystemAccent(
+                alertColor
+            );
+        }
+
+        updateAlertsPanel();
+    },
+
+
+
 
     getAlerts() {
         return this.alerts;
@@ -1443,7 +1459,7 @@ function updateAlertsPanel() {
         );
 
         updateRadarStatusBorderPriority(
-            "normal"    
+            "normal"
         );
 
         alertsStatus.textContent =
@@ -1545,12 +1561,12 @@ function updateAlertsPanel() {
                 const priorityDifference =
                     (
                         priorityOrder[
-                            priorityB
+                        priorityB
                         ] || 0
                     ) -
                     (
                         priorityOrder[
-                            priorityA
+                        priorityA
                         ] || 0
                     );
 
@@ -1585,7 +1601,7 @@ function updateAlertsPanel() {
 
     updateRadarStatusBorderPriority(
         alertPriority
-    );    
+    );
 
     switch (alertPriority) {
         case "critical":
@@ -1668,7 +1684,7 @@ function updateAlertsPanel() {
     } else {
         if (
             typeof highestAlert.distance ===
-                "number" &&
+            "number" &&
             Number.isFinite(
                 highestAlert.distance
             )
@@ -1689,10 +1705,9 @@ function updateAlertsPanel() {
                 ` ${highestAlert.direction}`;
 
             contextDetail +=
-                `${
-                    contextDetail
-                        ? " "
-                        : ""
+                `${contextDetail
+                    ? " "
+                    : ""
                 }${highestAlert.direction}`;
         }
     }
@@ -1892,7 +1907,7 @@ function applyMapLookAhead() {
     if (
         !radarMap ||
         operatingMode !==
-            OPERATING_MODES.DRIVING
+        OPERATING_MODES.DRIVING
     ) {
         return;
     }
@@ -1943,12 +1958,12 @@ function updateNavigationDisplay() {
     if (
         currentHeading !== null &&
         typeof radarMap.setBearing ===
-            "function"
+        "function"
     ) {
         const mapBearing =
             convertHeadingToMapBearing(
                 currentHeading
-        );
+            );
 
         const visualMapBearing =
             (360 - mapBearing) % 360;
@@ -2077,7 +2092,7 @@ async function loadWeather(latitude, longitude) {
         console.log(weatherUrl);
 
         const response = await fetch(weatherUrl);
-        
+
         if (!response.ok) {
             throw new Error(`Weather request failed: ${response.status}`);
         }
@@ -2088,16 +2103,16 @@ async function loadWeather(latitude, longitude) {
         document.getElementById("weather-temperature").textContent = `${Math.round(current.temperature_2m)}°F`;
 
         document.getElementById("weather-condition").textContent = getWeatherDescription(current.weather_code);
-            
+
         document.getElementById("weather-feels-like").textContent = `${Math.round(current.apparent_temperature)}°F`;
-            
-        document.getElementById("weather-humidity").textContent = `${Math.round(current.relative_humidity_2m)}%`;    
+
+        document.getElementById("weather-humidity").textContent = `${Math.round(current.relative_humidity_2m)}%`;
 
         document.getElementById("weather-wind").textContent = `${Math.round(current.wind_speed_10m)} mph`;
-            
-        document.getElementById("weather-gusts").textContent =`${Math.round(current.wind_gusts_10m)} mph`;
-            
-        weatherStatus.textContent = "Live conditions";    
+
+        document.getElementById("weather-gusts").textContent = `${Math.round(current.wind_gusts_10m)} mph`;
+
+        weatherStatus.textContent = "Live conditions";
     } catch (error) {
         console.error(error);
         weatherStatus.textContent = "Unable to load weather.";
@@ -2112,9 +2127,9 @@ function requestWeatherLocation() {
     const weatherStatus = document.getElementById("weather-status");
 
     if (!navigator.geolocation) {
-        weatherStatus.textContent = 
+        weatherStatus.textContent =
             "Location services are not supported by this browser.";
-        return;    
+        return;
     }
 
     navigator.geolocation.getCurrentPosition(
@@ -2217,7 +2232,7 @@ function isPointInsideRing(
 
     for (
         let currentIndex = 0,
-            previousIndex = ring.length - 1;
+        previousIndex = ring.length - 1;
         currentIndex < ring.length;
         previousIndex = currentIndex++
     ) {
@@ -2266,7 +2281,7 @@ function isPointInsideRing(
         if (
             crossesLatitude &&
             longitude <
-                intersectionLongitude
+            intersectionLongitude
         ) {
             isInside = !isInside;
         }
@@ -2311,7 +2326,7 @@ function isPointInsidePolygonCoordinates(
     for (
         let ringIndex = 1;
         ringIndex <
-            polygonCoordinates.length;
+        polygonCoordinates.length;
         ringIndex++
     ) {
         if (
@@ -2319,7 +2334,7 @@ function isPointInsidePolygonCoordinates(
                 latitude,
                 longitude,
                 polygonCoordinates[
-                    ringIndex
+                ringIndex
                 ]
             )
         ) {
@@ -2705,7 +2720,7 @@ function describeAlertDirection(
 
     if (
         operatingMode ===
-            OPERATING_MODES.DRIVING &&
+        OPERATING_MODES.DRIVING &&
         currentHeading !== null
     ) {
         relativeDirection =
@@ -2760,7 +2775,7 @@ async function getNearbySentinelAlerts() {
                 measurement.distanceMiles
             ) ||
             measurement.distanceMiles >
-                SENTINEL_RADIUS_MILES
+            SENTINEL_RADIUS_MILES
         ) {
             continue;
         }
@@ -2881,16 +2896,16 @@ function initializeMap() {
     const overlayMaps = {};
 
     layerControl = L.control.layers(
-    baseMaps,
-    overlayMaps,
-    {
-        collapsed: true,
-        position: "topleft"
-    }
-).addTo(radarMap);
+        baseMaps,
+        overlayMaps,
+        {
+            collapsed: true,
+            position: "topleft"
+        }
+    ).addTo(radarMap);
 
     radarLayerGroup =
-    L.layerGroup().addTo(radarMap);
+        L.layerGroup().addTo(radarMap);
 
     layerControl.addOverlay(
         radarLayerGroup,
@@ -2932,7 +2947,7 @@ function initializeMap() {
                 "map-controls-hidden"
             );
         }
-        
+
         radarControlsVisibilityManager
             .handleInteraction();
 
@@ -2963,7 +2978,7 @@ function initializeMap() {
                 currentLatitude = latitude;
                 currentLongitude = longitude;
 
-                const speedMetersPerSecond = 
+                const speedMetersPerSecond =
                     position.coords.speed;
 
                 if (speedMetersPerSecond !== null) {
@@ -2995,24 +3010,24 @@ function initializeMap() {
                 }
 
                 if (!locationMarker) {
-    locationMarker = L.marker(
-        [latitude, longitude],
-        {
-            icon: stationaryLocationIcon
-        }
-    ).addTo(
-        radarMap
-    );
+                    locationMarker = L.marker(
+                        [latitude, longitude],
+                        {
+                            icon: stationaryLocationIcon
+                        }
+                    ).addTo(
+                        radarMap
+                    );
 
-    radarMap.setView(
-        [latitude, longitude],
-        15
-    );
-} else {
-    locationMarker.setLatLng(
-        [latitude, longitude]
-    );
-}
+                    radarMap.setView(
+                        [latitude, longitude],
+                        15
+                    );
+                } else {
+                    locationMarker.setLatLng(
+                        [latitude, longitude]
+                    );
+                }
 
                 updateOperatingMode();
 
@@ -3030,11 +3045,11 @@ function initializeMap() {
                     rawSpeedMps:
                         position.coords.speed,
 
-                        currentSpeedMph,
+                    currentSpeedMph,
 
-                        averageSpeedMph:
-                    navigationIntelligenceManager
-                        .averageSpeedMph,
+                    averageSpeedMph:
+                        navigationIntelligenceManager
+                            .averageSpeedMph,
 
                     rawHeading:
                         position.coords.heading,
@@ -3053,7 +3068,7 @@ function initializeMap() {
                             ),
 
                     mapBearing:
-                    radarMap?.getBearing?.() ?? null,
+                        radarMap?.getBearing?.() ?? null,
 
                     actualZoom:
                         radarMap?.getZoom?.() ?? null,
@@ -3070,14 +3085,14 @@ function initializeMap() {
 
                     currentZoom:
                         radarMap?.getZoom?.(),
-                        
+
                     currentBearing:
                         radarMap?.getBearing?.(),
-                        
+
                     fullscreen:
                         mapPanel?.classList.contains(
-                                "fullscreen-map"
-                        )    
+                            "fullscreen-map"
+                        )
 
                 });
 
@@ -3090,11 +3105,11 @@ function initializeMap() {
                         fillColor: "#00ff00",
                         fillOpacity: 0.15
                     }).addTo(radarMap);
-                }else {
+                } else {
                     accuracyCircle.setLatLng([latitude, longitude]);
                     accuracyCircle.setRadius(accuracy);
                 }
-            
+
                 const accuracyFeet = position.coords.accuracy * 3.28084;
 
                 const currentZoom =
@@ -3109,15 +3124,15 @@ function initializeMap() {
                     icon: "🔴",
                     title: "GPS Signal Lost",
                     detail: "Location unavailable"
-                });    
+                });
 
-                 contextManager.setStatus({
+                contextManager.setStatus({
                     source: "gps",
                     priority: "normal",
                     icon: "🛰️",
                     title: "GPS Locked",
                     detail: "Navigation ready"
-                });   
+                });
             },
 
             function (error) {
@@ -3146,9 +3161,9 @@ function initializeMap() {
             }
         );
     } else {
-        
+
         mapStatus.hidden = false;
-        mapStatus.textContent = "GPS Unsupported";      
+        mapStatus.textContent = "GPS Unsupported";
 
         contextManager.setStatus({
             source: "gps",
@@ -3167,7 +3182,7 @@ function initializeMap() {
             .openPopup();
     }
 
-}  
+}
 
 // =============================
 // Weather Radar
@@ -3200,7 +3215,7 @@ async function initializeWeatherRadar() {
     }
 
     currentRadarFrame =
-        radarFrames.length - 1;
+        observedRadarFrames.length - 1;
 
     console.log(
         "[Radar] Loaded frames:",
@@ -3212,13 +3227,83 @@ async function initializeWeatherRadar() {
         currentRadarFrame
     );
 
+
     displayRadarFrame(
         currentRadarFrame
     );
 
     startRadarAnimation();
     startRadarMetadataRefresh();
-}   
+}
+
+function rebuildRadarFrames() {
+
+    switch (radarPlaybackMode) {
+
+        case RADAR_PLAYBACK_MODES.PAST:
+            radarFrames = [
+                ...observedRadarFrames
+            ];
+            break;
+
+        case RADAR_PLAYBACK_MODES.FORECAST:
+            radarFrames = [
+                ...forecastRadarFrames
+            ];
+            break;
+
+        case RADAR_PLAYBACK_MODES.COMBINED:
+        default:
+            radarFrames = [
+                ...observedRadarFrames,
+                ...forecastRadarFrames
+            ];
+            break;
+    }
+}
+
+function setRadarPlaybackMode(mode) {
+
+    const previousMode =
+        radarPlaybackMode;
+
+    radarPlaybackMode = mode;
+
+    rebuildRadarFrames();
+
+    if (radarFrames.length === 0) {
+        console.warn(
+            "[Radar] No frames available for mode:",
+            mode
+        );
+
+        radarPlaybackMode =
+            previousMode;
+
+        rebuildRadarFrames();
+
+        return;
+    }
+
+    if (
+        mode ===
+        RADAR_PLAYBACK_MODES.FORECAST
+    ) {
+        currentRadarFrame = 0;
+    } else {
+        currentRadarFrame =
+            observedRadarFrames.length - 1;
+    }
+
+    displayRadarFrame(
+        currentRadarFrame
+    );
+
+    console.log(
+        "[Radar] Playback mode:",
+        radarPlaybackMode
+    );
+}
 
 async function refreshRadarMetadata() {
     if (radarMetadataRefreshInProgress) {
@@ -3230,7 +3315,7 @@ async function refreshRadarMetadata() {
     }
 
     radarRefreshInProgress = true;
-    updateRadarFreshnessDisplay();      
+    updateRadarFreshnessDisplay();
 
     radarMetadataRefreshInProgress = true;
 
@@ -3255,8 +3340,29 @@ async function refreshRadarMetadata() {
         const radarData =
             await response.json();
 
-        const updatedFrames =
+        const updatedObservedFrames =
             radarData?.radar?.past;
+
+        const updatedForecastFrames =
+            Array.isArray(
+                radarData?.radar?.nowcast
+            )
+                ? radarData.radar.nowcast
+                : [];
+
+        const updatedFrames =
+            updatedObservedFrames;
+
+        console.log(
+            "[Radar] Source frames:",
+            {
+                observed:
+                    updatedObservedFrames?.length ?? 0,
+
+                forecast:
+                    updatedForecastFrames.length
+            }
+        );
 
         if (
             !Array.isArray(updatedFrames) ||
@@ -3268,9 +3374,9 @@ async function refreshRadarMetadata() {
         }
 
         const previousLatestFrame =
-            radarFrames.length > 0
-                ? radarFrames[
-                    radarFrames.length - 1
+            observedRadarFrames.length > 0
+                ? observedRadarFrames[
+                    observedRadarFrames.length - 1
                 ]?.time
                 : null;
 
@@ -3282,7 +3388,7 @@ async function refreshRadarMetadata() {
         const updatedLatestFrameSeconds =
             Number(updatedLatestFrame);
 
-        if (    
+        if (
             !Number.isFinite(
                 updatedLatestFrameSeconds
             )
@@ -3290,14 +3396,27 @@ async function refreshRadarMetadata() {
             throw new Error(
                 "RainViewer returned an invalid radar timestamp."
             );
-        }   
+        }
 
-        radarFrames = updatedFrames.map(
-            frame => ({
-                ...frame,
-                host: radarData.host
-            })
-        );
+        observedRadarFrames =
+            updatedObservedFrames.map(
+                frame => ({
+                    ...frame,
+                    host: radarData.host,
+                    frameType: "OBSERVED"
+                })
+            );
+
+        forecastRadarFrames =
+            updatedForecastFrames.map(
+                frame => ({
+                    ...frame,
+                    host: radarData.host,
+                    frameType: "FORECAST"
+                })
+            );
+
+        rebuildRadarFrames();
 
         lastRadarRefreshTime =
             Date.now();
@@ -3351,13 +3470,20 @@ async function refreshRadarMetadata() {
          * advance to the newly received
          * latest frame immediately.
          */
-        
+
         if (
             !radarIsPlaying &&
             newDataAvailable
         ) {
-            currentRadarFrame =
-                radarFrames.length - 1;
+            if (
+                radarPlaybackMode ===
+                RADAR_PLAYBACK_MODES.FORECAST
+            ) {
+                currentRadarFrame = 0;
+            } else {
+                currentRadarFrame =
+                    observedRadarFrames.length - 1;
+            }
 
             displayRadarFrame(
                 currentRadarFrame
@@ -3572,8 +3698,8 @@ function fadeOutRadarLayer(layer) {
 
     setTimeout(() => {
         if (radarLayerGroup.hasLayer(layer)) {
-        radarLayerGroup.removeLayer(layer);
-    }
+            radarLayerGroup.removeLayer(layer);
+        }
     }, RADAR_LAYER_CLEANUP_DELAY);
 }
 
@@ -3654,11 +3780,19 @@ function updateRadarTimestamp(frame) {
     const timestamp =
         new Date(frame.time * 1000);
 
-    timestampDisplay.textContent =
+    const timeText =
         timestamp.toLocaleTimeString([], {
             hour: "numeric",
             minute: "2-digit"
         });
+
+    const frameLabel =
+        frame.frameType === "FORECAST"
+            ? "FORECAST"
+            : "OBSERVED";
+
+    timestampDisplay.textContent =
+        `${timeText} • ${frameLabel}`;
 }
 
 function initializeRadarControls() {
@@ -3687,12 +3821,18 @@ function initializeRadarControls() {
             "radar-next"
         );
 
+    const modeSelect =
+        document.getElementById(
+            "radar-mode-select"
+        );
+
     if (
         !radarControls ||
         !toggleButton ||
         !previousButton ||
         !playButton ||
-        !nextButton
+        !nextButton ||
+        !modeSelect
     ) {
         console.error(
             "[Radar Controls] Required controls not found."
@@ -3738,6 +3878,19 @@ function initializeRadarControls() {
         function () {
             radarControlsVisibilityManager
                 .handleInteraction();
+        }
+    );
+
+    modeSelect.addEventListener(
+        "change",
+        function () {
+
+            setRadarPlaybackMode(
+                modeSelect.value
+            );
+
+            modeSelect.value =
+                radarPlaybackMode;
         }
     );
 
@@ -3895,7 +4048,7 @@ function handleRadarZoomLimit() {
 }
 
 
-       
+
 
 // ====================================
 // Lightning Functions
@@ -3912,17 +4065,17 @@ async function initializeLightning() {
     );
 
     addTestLightningStrike();
-    
+
     console.log("Lightning layer ready.");
 }
 
 function clearLightning() {
-    lightningLayer.clearLayers ();
+    lightningLayer.clearLayers();
 }
 
 function addTestLightningStrike() {
     console.log("Adding test lightning strike...");
-    
+
     const testLatitude = 30.35;
     const testLongitude = -93.15;
 
@@ -4598,16 +4751,14 @@ async function loadNwsWarnings() {
                                             </strong>
                                             <br>
 
-                                            ${
-                                                properties.headline ||
-                                                ""
+                                            ${properties.headline ||
+                                            ""
                                             }
                                             <br><br>
 
                                             <strong>Area:</strong>
-                                            ${
-                                                properties.areaDesc ||
-                                                "Unknown"
+                                            ${properties.areaDesc ||
+                                            "Unknown"
                                             }
                                             <br>
 
@@ -4620,37 +4771,33 @@ async function loadNwsWarnings() {
                                             <br>
 
                                             <strong>Bearing:</strong>
-                                            ${
-                                                directionData.bearing ===
+                                            ${directionData.bearing ===
                                                 null
-                                                    ? "Current Location"
-                                                    : (
-                                                        `${directionData
-                                                            .bearing
-                                                            .toFixed(1)}°`
-                                                    )
+                                                ? "Current Location"
+                                                : (
+                                                    `${directionData
+                                                        .bearing
+                                                        .toFixed(1)}°`
+                                                )
                                             }
                                             <br>
 
                                             <strong>Severity:</strong>
-                                            ${
-                                                properties.severity ||
-                                                "Unknown"
+                                            ${properties.severity ||
+                                            "Unknown"
                                             }
                                             <br>
 
                                             <strong>Urgency:</strong>
-                                            ${
-                                                properties.urgency ||
-                                                "Unknown"
+                                            ${properties.urgency ||
+                                            "Unknown"
                                             }
                                             <br>
 
                                             <strong>Expires:</strong>
-                                            ${
-                                                formatAlertTime(
-                                                    properties.expires
-                                                )
+                                            ${formatAlertTime(
+                                                properties.expires
+                                            )
                                             }
                                         `);
                                     }
@@ -5039,26 +5186,26 @@ function calculateSentinelRelevanceScore({
     let score =
         SENTINEL_RELEVANCE_WEIGHTS
             .basePriority[
-                normalizedPriority
-            ] || 0;
+        normalizedPriority
+        ] || 0;
 
     score +=
         SENTINEL_RELEVANCE_WEIGHTS
             .severity[
-                normalizedSeverity
-            ] || 0;
+        normalizedSeverity
+        ] || 0;
 
     score +=
         SENTINEL_RELEVANCE_WEIGHTS
             .urgency[
-                normalizedUrgency
-            ] || 0;
+        normalizedUrgency
+        ] || 0;
 
     score +=
         SENTINEL_RELEVANCE_WEIGHTS
             .certainty[
-                normalizedCertainty
-            ] || 0;
+        normalizedCertainty
+        ] || 0;
 
     score += getAlertDistanceScore(
         distanceMiles
@@ -5393,7 +5540,7 @@ function zoomToGeometryFeatures(
             if (
                 currentHeading !== null &&
                 typeof radarMap.setBearing ===
-                    "function"
+                "function"
             ) {
                 const mapBearing =
                     convertHeadingToMapBearing(
@@ -5416,7 +5563,7 @@ function zoomToGeometryFeatures(
             }
         } else if (
             typeof radarMap.setBearing ===
-                "function"
+            "function"
         ) {
             radarMap.setBearing(
                 0
@@ -5467,41 +5614,41 @@ function zoomToGeometryFeatures(
     }
 
     function beginReturnSequence() {
-    const returnSearchZoom =
-        Math.max(
-            MIN_MAP_ZOOM,
-            radarMap.getZoom() - 3
+        const returnSearchZoom =
+            Math.max(
+                MIN_MAP_ZOOM,
+                radarMap.getZoom() - 3
+            );
+
+        /*
+         * Return stage 1:
+         * Pull back while remaining centered on
+         * the alert area.
+         */
+        radarMap.flyTo(
+            radarMap.getCenter(),
+            returnSearchZoom,
+            {
+                animate: true,
+                duration:
+                    isMobilePortrait
+                        ? 0.6
+                        : 0.7
+            }
         );
 
-    /*
-     * Return stage 1:
-     * Pull back while remaining centered on
-     * the alert area.
-     */
-    radarMap.flyTo(
-        radarMap.getCenter(),
-        returnSearchZoom,
-        {
-            animate: true,
-            duration:
-                isMobilePortrait
-                    ? 0.6
-                    : 0.7
-        }
-    );
-
-    /*
-     * Return stage 2:
-     * After the pullback completes, fly back
-     * to the vehicle and restore its zoom.
-     */
-    setTimeout(
-        flyBackToVehicle,
-        isMobilePortrait
-            ? 650
-            : 750
-    );
-}
+        /*
+         * Return stage 2:
+         * After the pullback completes, fly back
+         * to the vehicle and restore its zoom.
+         */
+        setTimeout(
+            flyBackToVehicle,
+            isMobilePortrait
+                ? 650
+                : 750
+        );
+    }
 
     function beginAlertInspection() {
         /*
@@ -5540,8 +5687,8 @@ function zoomToGeometryFeatures(
                     sentinelReturnTimer =
                         null;
                 },
-                SENTINEL_ALERT_INSPECTION_MS
-            );
+                    SENTINEL_ALERT_INSPECTION_MS
+                );
 
             return;
         }
@@ -5595,9 +5742,9 @@ function zoomToGeometryFeatures(
                     sentinelReturnTimer =
                         null;
                 },
-                1150 +
-                SENTINEL_ALERT_INSPECTION_MS
-            );
+                    1150 +
+                    SENTINEL_ALERT_INSPECTION_MS
+                );
         }, 750);
     }
 
@@ -5666,7 +5813,7 @@ expandMapButton.addEventListener("click", function () {
     document.body.classList.toggle(
         "map-open",
         isFullscreen
-    );    
+    );
 
     const mapControls =
         document.getElementById("map-controls");
@@ -5674,7 +5821,7 @@ expandMapButton.addEventListener("click", function () {
     mapControls?.classList.toggle(
         "map-controls-hidden",
         isFullscreen
-    );   
+    );
 
     expandMapButton.setAttribute(
         "aria-label",
