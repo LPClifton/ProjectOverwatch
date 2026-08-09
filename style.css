@@ -1028,26 +1028,58 @@ body.map-open {
         min-height: 320px;
         max-height: 520px;
     }
-
+    
     #map-controls {
-        gap: 6px;
-        flex-wrap: wrap;
-    }
+    gap: 6px;
+}
 
-    #radar-controls,
-    #map-utility-controls {
-        gap: 6px;
-        flex-wrap: wrap;
-    }
+#radar-action-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 
-    #radar-controls {
-        width: 100%;
-    }
+    gap: 8px;
+    width: 100%;
 
-    #map-controls button {
-        width: 40px;
-        height: 40px;
-    }
+    flex-wrap: nowrap;
+}
+
+#radar-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+
+    gap: 8px;
+
+    width: auto;
+    flex: 1 1 auto;
+
+    flex-wrap: nowrap;
+}
+
+#map-utility-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+
+    gap: 8px;
+
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+
+    padding-left: 8px;
+}
+
+#map-zoom-level {
+    white-space: nowrap;
+}
+
+#map-controls button {
+    width: 40px;
+    height: 40px;
+
+    flex: 0 0 40px;
+}
 
     #radar-timestamp {
         box-sizing: border-box;
