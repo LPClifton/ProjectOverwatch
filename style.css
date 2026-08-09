@@ -1481,3 +1481,84 @@ body.map-open {
         padding: 0;
     }
 }
+
+/* =========================================
+   PHONE LANDSCAPE — RADAR STATUS ROW
+   ========================================= */
+
+@media screen and
+       (orientation: landscape) and
+       (max-height: 500px) {
+
+    #map-panel.fullscreen-map #radar-status-row {
+        position: relative;
+
+        display: grid;
+
+        grid-template-columns:
+            110px
+            minmax(0, 1fr)
+            50px;
+
+        gap: 6px;
+
+        width: 100%;
+        min-width: 0;
+
+        box-sizing: border-box;
+
+        padding-right: 0;
+    }
+
+    #map-panel.fullscreen-map #radar-timestamp {
+        width: auto;
+        min-width: 0;
+
+        padding: 6px 8px;
+
+        font-size: 12px;
+        white-space: nowrap;
+    }
+
+    #map-panel.fullscreen-map #radar-freshness {
+        width: auto;
+        min-width: 0;
+
+        padding: 6px 8px;
+
+        box-sizing: border-box;
+        overflow: hidden;
+    }
+
+    #map-panel.fullscreen-map
+    .radar-freshness-primary,
+    #map-panel.fullscreen-map
+    .radar-freshness-secondary {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    #map-panel.fullscreen-map
+    #toggle-radar-controls {
+        display: flex !important;
+
+        width: 50px !important;
+        min-width: 50px !important;
+        max-width: 50px !important;
+
+        height: 100%;
+        min-height: 40px;
+
+        margin: 0;
+        padding: 0;
+
+        box-sizing: border-box;
+
+        align-items: center;
+        justify-content: center;
+
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+}
