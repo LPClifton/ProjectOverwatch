@@ -51,6 +51,14 @@ const RADAR_PLAYBACK_MODES = {
     FORECAST: "FORECAST",
     COMBINED: "COMBINED"
 };
+const HRRR_METADATA_URL =
+    "https://mesonet.agron.iastate.edu/data/gis/images/4326/hrrr/refd_1080.json";
+
+const HRRR_FORECAST_STEP_MINUTES = 15;
+
+const HRRR_FORECAST_MAX_MINUTES =
+    18 * 60;
+
 
 
 const SENTINEL_RADIUS_MILES = 250;
@@ -261,7 +269,7 @@ function updateOperatingMode() {
     operatingMode = newOperatingMode;
 
     navigationIntelligenceManager.mode =
-    operatingMode;
+        operatingMode;
 
     console.log(
         "Operating mode changed:",
@@ -843,7 +851,7 @@ const navigationIntelligenceManager = {
                 this.averageSpeedMph
             );
 
-            this.mode = operatingMode;
+        this.mode = operatingMode;
 
         console.log("[Navigation]", {
             currentSpeedMph:
@@ -3196,6 +3204,23 @@ async function initializeWeatherRadar() {
 
     await refreshRadarMetadata();
 
+    try {
+        forecastRadarFrames =
+            await fetchHrrrForecastFrames();
+
+        rebuildRadarFrames();
+
+        console.log(
+            "[HRRR] Forecast initialized:",
+            forecastRadarFrames.length
+        );
+    } catch (error) {
+        console.error(
+            "[HRRR] Forecast initialization failed:",
+            error
+        );
+    }
+
     if (radarFrames.length === 0) {
         console.error(
             "Weather radar could not be initialized."
@@ -3305,6 +3330,142 @@ function setRadarPlaybackMode(mode) {
     );
 }
 
+function buildHrrrTileUrl(
+    modelInitUtc,
+    forecastMinute
+) {
+    const modelInit =
+        new Date(modelInitUtc);
+
+    const modelStamp = [
+        modelInit.getUTCFullYear(),
+
+        String(
+            modelInit.getUTCMonth() + 1
+        ).padStart(2, "0"),
+
+        String(
+            modelInit.getUTCDate()
+        ).padStart(2, "0"),
+
+        String(
+            modelInit.getUTCHours()
+        ).padStart(2, "0"),
+
+        String(
+            modelInit.getUTCMinutes()
+        ).padStart(2, "0")
+    ].join("");
+
+    const forecastCode =
+        String(forecastMinute)
+            .padStart(4, "0");
+
+    return (
+        "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/" +
+        `hrrr::REFD-F${forecastCode}-${modelStamp}/` +
+        "{z}/{x}/{y}.png"
+    );
+}
+
+function buildHrrrForecastFrames(
+    modelInitUtc
+) {
+    const modelInit =
+        new Date(modelInitUtc);
+
+    const frames = [];
+
+    for (
+        let forecastMinute =
+            HRRR_FORECAST_STEP_MINUTES;
+
+        forecastMinute <=
+        HRRR_FORECAST_MAX_MINUTES;
+
+        forecastMinute +=
+        HRRR_FORECAST_STEP_MINUTES
+    ) {
+        const validTime =
+            modelInit.getTime() +
+            forecastMinute * 60 * 1000;
+
+        frames.push({
+            time:
+                Math.floor(
+                    validTime / 1000
+                ),
+
+            frameType: "FORECAST",
+
+            source: "HRRR",
+
+            forecastMinute,
+
+            tileUrl:
+                buildHrrrTileUrl(
+                    modelInitUtc,
+                    forecastMinute
+                )
+        });
+    }
+
+    return frames;
+}
+
+async function fetchHrrrForecastFrames() {
+
+    const response =
+        await fetch(
+            HRRR_METADATA_URL
+        );
+
+    if (!response.ok) {
+        throw new Error(
+            `HRRR metadata request failed: ${response.status}`
+        );
+    }
+
+    const metadata =
+        await response.json();
+
+    const frames =
+        buildHrrrForecastFrames(
+            metadata.model_init_utc
+        );
+
+    const currentTimeSeconds =
+        Date.now() / 1000;
+
+    const futureFrames =
+        frames.filter(
+            frame =>
+                frame.time >
+                currentTimeSeconds
+        );
+
+    console.log(
+        "[HRRR] Forecast frames:",
+        {
+            modelInit:
+                metadata.model_init_utc,
+
+            frameCount:
+                frames.length,
+
+            firstFrame:
+                frames[0],
+
+            lastFrame:
+                frames[
+                frames.length - 1
+                ]
+        }
+    );
+
+    return futureFrames;
+}
+
 async function refreshRadarMetadata() {
     if (radarMetadataRefreshInProgress) {
         console.log(
@@ -3407,14 +3568,6 @@ async function refreshRadarMetadata() {
                 })
             );
 
-        forecastRadarFrames =
-            updatedForecastFrames.map(
-                frame => ({
-                    ...frame,
-                    host: radarData.host,
-                    frameType: "FORECAST"
-                })
-            );
 
         rebuildRadarFrames();
 
@@ -3562,19 +3715,25 @@ function displayRadarFrame(frameIndex) {
         currentZoom <= 7;
 
     const radarTileUrl =
-        frame.host +
-        frame.path +
-        "/256/{z}/{x}/{y}/2/1_1.png";
+        frame.tileUrl
+            ? frame.tileUrl
+            : (
+                frame.host +
+                frame.path +
+                "/256/{z}/{x}/{y}/2/1_1.png"
+            );
 
     const newRadarLayer =
         L.tileLayer(radarTileUrl, {
-            tileSize: 256,
             opacity:
                 isWideView
                     ? RADAR_OPACITY
                     : 0,
 
-            maxNativeZoom: 7,
+            maxNativeZoom:
+                frame.source === "HRRR"
+                    ? undefined
+                    : 7,
             maxZoom: 19,
             minZoom: MIN_MAP_ZOOM,
 
@@ -3615,8 +3774,6 @@ function displayRadarFrame(frameIndex) {
 
         weatherRadar.addTo(radarLayerGroup);
     } else {
-        newRadarLayer.addTo(radarLayerGroup);
-
         newRadarLayer.once(
             "load",
             function () {
@@ -3636,6 +3793,10 @@ function displayRadarFrame(frameIndex) {
                     );
                 }
             }
+        );
+
+        newRadarLayer.addTo(
+            radarLayerGroup
         );
     }
 
@@ -3783,7 +3944,8 @@ function updateRadarTimestamp(frame) {
     const timeText =
         timestamp.toLocaleTimeString([], {
             hour: "numeric",
-            minute: "2-digit"
+            minute: "2-digit",
+            hourCycle: "h23"
         });
 
     const frameLabel =
