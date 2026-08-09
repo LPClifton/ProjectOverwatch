@@ -1008,8 +1008,15 @@ const radarControlsVisibilityManager = {
 
     toggle() {
         if (this.isFullscreen()) {
-            return;
-        }
+        const mapControls =
+            this.getControls();
+
+        mapControls?.classList.add(
+            "map-controls-hidden"
+        );
+
+        return;
+    }
 
         this.isExpanded =
             !this.isExpanded;
