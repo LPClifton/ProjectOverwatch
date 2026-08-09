@@ -1368,3 +1368,49 @@ body.map-open {
     left: 12px;
     z-index: 2100;
 }
+
+/* Fullscreen phone landscape — keep status row inside screen */
+@media screen and (max-width: 900px) and (orientation: landscape) {
+
+    #map-panel.fullscreen-map #radar-status-row {
+        grid-template-columns:
+            auto
+            minmax(0, 1fr)
+            auto;
+
+        gap: 6px;
+        width: 100%;
+        min-width: 0;
+    }
+
+    #map-panel.fullscreen-map #radar-freshness {
+        min-width: 0;
+
+        padding: 6px 8px;
+
+        font-size: 12px;
+
+        overflow: hidden;
+    }
+
+    #map-panel.fullscreen-map
+    .radar-freshness-primary,
+    #map-panel.fullscreen-map
+    .radar-freshness-secondary {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    #map-panel.fullscreen-map #radar-timestamp {
+        padding: 6px 8px;
+        font-size: 12px;
+    }
+
+    #map-panel.fullscreen-map
+    #toggle-radar-controls {
+        width: 44px;
+        min-width: 44px;
+        min-height: 38px;
+    }
+}
