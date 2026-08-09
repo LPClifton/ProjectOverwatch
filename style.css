@@ -294,7 +294,7 @@ body.map-open {
 
 #map-panel.fullscreen-map #map-controls {
     position: absolute;
-    bottom: 76px;
+    bottom: 12px;
     left: 50%;
     transform: translateX(-50%);
 
@@ -484,17 +484,7 @@ body.map-open {
 /*
  * Fullscreen keeps both control rows visible.
  */
-#map-panel.fullscreen-map
-#radar-action-row {
-    max-height: 80px;
 
-    opacity: 1;
-    visibility: visible;
-
-    pointer-events: auto;
-
-    transform: none;
-}
 
 @media screen and (max-width: 900px) {
     #radar-status-row {

@@ -24,6 +24,7 @@ const MIN_HEADING_SPEED_MPH = 3;
 
 const FOLLOW_SPEED_MPH = 8;
 const SPEED_AVERAGE_DURATION_MS = 30 * 1000
+const PARKED_DELAY_MS = 60 * 1000;
 
 const MAP_LOOK_AHEAD_RATIO = 0.22;
 
@@ -132,6 +133,7 @@ const SENTINEL_RELEVANCE_WEIGHTS = {
 
 let appProfile = APP_PROFILES.VEHICLE;
 let operatingMode = OPERATING_MODES.PARKED;
+let drivingStopStartTime = null;
 
 let currentLatitude = null;
 let currentLongitude = null;
@@ -181,6 +183,8 @@ let tempestReconnectTimer;
 
 function determineOperatingMode() {
     if (currentSpeedMph >= FOLLOW_SPEED_MPH) {
+        drivingStopStartTime = null;
+
         return OPERATING_MODES.DRIVING;
     }
 
@@ -190,6 +194,41 @@ function determineOperatingMode() {
     ) {
         return OPERATING_MODES.WALKING;
     }
+
+    if (operatingMode === OPERATING_MODES.DRIVING) {
+
+    if (currentSpeedMph >= 2) {
+
+    if (drivingStopStartTime !== null) {
+        diagnosticLog("Operating Mode", {
+            event: "Driving stop timer reset",
+            currentSpeedMph
+        });
+    }
+
+    drivingStopStartTime = null;
+
+    return OPERATING_MODES.DRIVING;
+}
+
+    if (drivingStopStartTime === null) {
+    drivingStopStartTime = Date.now();
+
+    diagnosticLog("Operating Mode", {
+        event: "Driving stop timer started",
+        currentSpeedMph
+    });
+}
+
+    const stoppedDuration =
+        Date.now() - drivingStopStartTime;
+
+    if (stoppedDuration < PARKED_DELAY_MS) {
+        return OPERATING_MODES.DRIVING;
+    }
+
+    drivingStopStartTime = null;
+}
 
     return OPERATING_MODES.PARKED;
 }
@@ -924,8 +963,7 @@ const radarControlsVisibilityManager = {
         }
 
         const shouldShow =
-            this.isFullscreen() ||
-            this.isExpanded;
+    this.isExpanded;
 
         radarControls.classList.toggle(
             "radar-controls-collapsed",
@@ -2876,6 +2914,17 @@ function initializeMap() {
     });
 
     radarMap.on("click", function (event) {
+        const mapControls =
+            document.getElementById("map-controls");
+
+        if (
+            mapPanel?.classList.contains("fullscreen-map")
+        ) {
+            mapControls?.classList.remove(
+                "map-controls-hidden"
+            );
+        }
+        
         radarControlsVisibilityManager
             .handleInteraction();
 
@@ -5609,7 +5658,15 @@ expandMapButton.addEventListener("click", function () {
     document.body.classList.toggle(
         "map-open",
         isFullscreen
-    );
+    );    
+
+    const mapControls =
+        document.getElementById("map-controls");
+
+    mapControls?.classList.toggle(
+        "map-controls-hidden",
+        isFullscreen
+    );   
 
     expandMapButton.setAttribute(
         "aria-label",
