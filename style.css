@@ -389,6 +389,35 @@ body.map-open {
     gap: 10px;
 }
 
+#radar-mode-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    flex: 0 0 auto;
+}
+
+#radar-mode-select {
+    height: 40px;
+    min-width: 84px;
+
+    padding: 0 8px;
+
+    border:
+        1px solid
+        var(--system-accent);
+
+    border-radius: 8px;
+
+    background: #111;
+    color: var(--system-accent);
+
+    font: inherit;
+    font-size: 13px;
+
+    cursor: pointer;
+}
+
 /*
  * Keep a little separation between the
  * playback controls and map utilities.
