@@ -38,8 +38,9 @@ const RADAR_STALE_AGE_MS = 25 * 60 * 1000;
 const RADAR_STATUS_UPDATE_INTERVAL_MS =
     30 * 1000;
 
-const RADAR_FADE_DURATION = 350
-const RADAR_LAYER_CLEANUP_DELAY = 450;
+const RADAR_FADE_DURATION = 850
+const RADAR_LAYER_CLEANUP_DELAY = 
+    RADAR_FADE_DURATION + 100;
 const MIN_MAP_ZOOM = 5;
 const MIN_ANIMATED_RADAR_ZOOM = 8;
 const RADAR_REFRESH_INTERVAL_MS =
@@ -3533,7 +3534,7 @@ function displayRadarFrame(frameIndex) {
 function fadeInRadarLayer(layer) {
     let opacity = 0;
 
-    const fadeStep = 50;
+    const fadeStep = 16;
     const opacityStep =
         RADAR_OPACITY /
         (RADAR_FADE_DURATION / fadeStep);
@@ -3553,7 +3554,7 @@ function fadeInRadarLayer(layer) {
 function fadeOutRadarLayer(layer) {
     let opacity = RADAR_OPACITY;
 
-    const fadeStep = 50;
+    const fadeStep = 16;
     const opacityStep =
         RADAR_OPACITY /
         (RADAR_FADE_DURATION / fadeStep);
