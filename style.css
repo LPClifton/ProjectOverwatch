@@ -1369,126 +1369,30 @@ body.map-open {
     z-index: 2100;
 }
 
-/* Fullscreen phone landscape — keep status row inside screen */
-@media screen and (max-width: 1100px) and (orientation: landscape) {
-
-    #map-panel.fullscreen-map #radar-status-row {
-        grid-template-columns:
-            auto
-            minmax(0, 1fr)
-            auto;
-
-        gap: 6px;
-        width: 100%;
-        min-width: 0;
-    }
-
-    #map-panel.fullscreen-map #radar-freshness {
-        min-width: 0;
-
-        padding: 6px 8px;
-
-        font-size: 12px;
-
-        overflow: hidden;
-    }
-
-    #map-panel.fullscreen-map
-    .radar-freshness-primary,
-    #map-panel.fullscreen-map
-    .radar-freshness-secondary {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    #map-panel.fullscreen-map #radar-timestamp {
-        padding: 6px 8px;
-        font-size: 12px;
-    }
-
-    #map-panel.fullscreen-map
-    #toggle-radar-controls {
-        width: 44px;
-        min-width: 44px;
-        min-height: 38px;
-    }
-}
-
-@media screen and (max-width: 1100px) and (orientation: landscape) {
-
-    #map-panel.fullscreen-map #map-controls {
-        left: 12px;
-        right: 12px;
-
-        width: auto;
-        max-width: calc(100vw - 24px);
-
-        box-sizing: border-box;
-        overflow: hidden;
-
-        transform: none;
-    }
-
-    #map-panel.fullscreen-map #radar-status-row {
-        display: flex;
-        align-items: stretch;
-
-        width: 100%;
-        min-width: 0;
-
-        gap: 6px;
-    }
-
-    #map-panel.fullscreen-map #radar-timestamp {
-        flex: 0 0 auto;
-
-        padding: 6px 8px;
-
-        font-size: 12px;
-        white-space: nowrap;
-    }
-
-    #map-panel.fullscreen-map #radar-freshness {
-        flex: 1 1 0;
-
-        width: auto;
-        min-width: 0;
-
-        box-sizing: border-box;
-
-        padding: 6px 8px;
-
-        overflow: hidden;
-    }
-
-    #map-panel.fullscreen-map
-    .radar-freshness-primary,
-    #map-panel.fullscreen-map
-    .radar-freshness-secondary {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    #map-panel.fullscreen-map
-    #toggle-radar-controls {
-        flex: 0 0 48px;
-
-        width: 48px;
-        min-width: 48px;
-
-        padding: 0;
-    }
-}
-
 /* =========================================
-   PHONE LANDSCAPE — RADAR STATUS ROW
+   FULLSCREEN — PHONE LANDSCAPE CONTROLS
    ========================================= */
 
 @media screen and
        (orientation: landscape) and
        (max-height: 500px) {
+
+    #map-panel.fullscreen-map #map-controls {
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+
+        width: auto;
+        max-width: none;
+
+        box-sizing: border-box;
+
+        padding: 8px 10px;
+
+        overflow: visible;
+
+        transform: none;
+    }
 
     #map-panel.fullscreen-map #radar-status-row {
         position: relative;
@@ -1496,37 +1400,37 @@ body.map-open {
         display: grid;
 
         grid-template-columns:
-            110px
-            minmax(0, 1fr)
-            50px;
+            100px
+            minmax(0, 1fr);
 
         gap: 6px;
 
         width: 100%;
         min-width: 0;
 
-        box-sizing: border-box;
+        padding-right: 56px;
 
-        padding-right: 0;
+        box-sizing: border-box;
     }
 
     #map-panel.fullscreen-map #radar-timestamp {
-        width: auto;
         min-width: 0;
 
         padding: 6px 8px;
+
+        box-sizing: border-box;
 
         font-size: 12px;
         white-space: nowrap;
     }
 
     #map-panel.fullscreen-map #radar-freshness {
-        width: auto;
         min-width: 0;
 
         padding: 6px 8px;
 
         box-sizing: border-box;
+
         overflow: hidden;
     }
 
@@ -1541,14 +1445,20 @@ body.map-open {
 
     #map-panel.fullscreen-map
     #toggle-radar-controls {
-        display: flex !important;
+        position: absolute;
 
-        width: 50px !important;
-        min-width: 50px !important;
-        max-width: 50px !important;
+        top: 0;
+        right: 0;
+        bottom: 0;
 
-        height: 100%;
-        min-height: 40px;
+        display: flex;
+
+        width: 50px;
+        min-width: 50px;
+        max-width: 50px;
+
+        height: auto;
+        min-height: 0;
 
         margin: 0;
         padding: 0;
@@ -1558,50 +1468,7 @@ body.map-open {
         align-items: center;
         justify-content: center;
 
-        visibility: visible !important;
-        opacity: 1 !important;
-    }
-}
-
-@media screen and
-       (orientation: landscape) and
-       (max-height: 500px) {
-
-    #map-panel.fullscreen-map #map-controls {
-        left: 12px !important;
-        right: auto !important;
-
-        width: calc(100% - 24px) !important;
-        max-width: calc(100% - 24px) !important;
-
-        box-sizing: border-box !important;
-
-        transform: none !important;
-    }
-
-    #map-panel.fullscreen-map #radar-status-row {
-        width: 100%;
-        min-width: 0;
-
-        grid-template-columns:
-            auto
-            minmax(0, 1fr)
-            50px;
-    }
-
-    #map-panel.fullscreen-map #radar-freshness {
-        min-width: 0;
-        overflow: hidden;
-    }
-
-    #map-panel.fullscreen-map #toggle-radar-controls {
-        display: flex !important;
-
-        width: 50px !important;
-        min-width: 50px !important;
-        max-width: 50px !important;
-
-        visibility: visible !important;
-        opacity: 1 !important;
+        visibility: visible;
+        opacity: 1;
     }
 }
