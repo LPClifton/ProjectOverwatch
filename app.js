@@ -29,8 +29,12 @@ const PARKED_DELAY_MS = 60 * 1000;
 const MAP_LOOK_AHEAD_RATIO = 0.22;
 
 const RADAR_OPACITY = 0.6;
-const RADAR_FRAME_DELAY = 2000;
+const RADAR_FRAME_DELAY = 1000;
 const RADAR_END_PAUSE = 4000;
+
+const RADAR_NOW_PAUSE = 2000;
+const RADAR_FORECAST_END_PAUSE = 3000
+
 const RADAR_FRESH_AGE_MS = 8 * 60 * 1000;
 const RADAR_AGING_AGE_MS = 15 * 60 * 1000;
 const RADAR_STALE_AGE_MS = 25 * 60 * 1000;
@@ -57,7 +61,7 @@ const HRRR_METADATA_URL =
 const HRRR_FORECAST_STEP_MINUTES = 15;
 
 const HRRR_FORECAST_MAX_MINUTES =
-    18 * 60;
+    6 * 60;
 
 
 
@@ -3865,6 +3869,7 @@ function fadeOutRadarLayer(layer) {
 }
 
 // Animation
+
 function startRadarAnimation() {
     if (radarAnimationTimer) {
         clearTimeout(radarAnimationTimer);
@@ -3872,32 +3877,227 @@ function startRadarAnimation() {
 
     radarIsPlaying = true;
 
-    function advanceRadarFrame() {
-        currentRadarFrame++;
+    /*
+     * PAST and FORECAST retain the normal
+     * linear playback behavior.
+     */
+    if (
+        radarPlaybackMode !==
+        RADAR_PLAYBACK_MODES.COMBINED
+    ) {
+        function advanceRadarFrame() {
+            currentRadarFrame++;
 
-        if (currentRadarFrame >= radarFrames.length) {
-            currentRadarFrame = 0;
+            if (
+                currentRadarFrame >=
+                radarFrames.length
+            ) {
+                currentRadarFrame = 0;
+            }
+
+            displayRadarFrame(
+                currentRadarFrame
+            );
+
+            const isNewestFrame =
+                currentRadarFrame ===
+                radarFrames.length - 1;
+
+            const nextDelay =
+                isNewestFrame
+                    ? RADAR_END_PAUSE
+                    : RADAR_FRAME_DELAY;
+
+            radarAnimationTimer =
+                setTimeout(
+                    advanceRadarFrame,
+                    nextDelay
+                );
         }
 
-        displayRadarFrame(currentRadarFrame);
+        radarAnimationTimer =
+            setTimeout(
+                advanceRadarFrame,
+                RADAR_FRAME_DELAY
+            );
 
-        const isNewestFrame =
-            currentRadarFrame === radarFrames.length - 1;
-
-        const nextDelay = isNewestFrame
-            ? RADAR_END_PAUSE
-            : RADAR_FRAME_DELAY;
-
-        radarAnimationTimer = setTimeout(
-            advanceRadarFrame,
-            nextDelay
-        );
+        return;
     }
 
-    radarAnimationTimer = setTimeout(
-        advanceRadarFrame,
-        RADAR_FRAME_DELAY
-    );
+    /*
+     * COMBINED playback:
+     *
+     * NOW
+     * pause
+     * oldest observed
+     * play forward to NOW
+     * pause
+     * forecast
+     * pause
+     * repeat
+     */
+
+    const newestObservedIndex =
+        observedRadarFrames.length - 1;
+
+    const firstForecastIndex =
+        observedRadarFrames.length;
+
+    const lastFrameIndex =
+        radarFrames.length - 1;
+
+    function startCombinedCycle() {
+
+        // Anchor the viewer on current conditions.
+        currentRadarFrame =
+            newestObservedIndex;
+
+        displayRadarFrame(
+            currentRadarFrame
+        );
+
+        radarAnimationTimer =
+            setTimeout(
+                startObservedPlayback,
+                RADAR_NOW_PAUSE
+            );
+    }
+
+    function startObservedPlayback() {
+
+        // Rewind to oldest observed frame.
+        currentRadarFrame = 0;
+
+        displayRadarFrame(
+            currentRadarFrame
+        );
+
+        radarAnimationTimer =
+            setTimeout(
+                advanceObservedFrame,
+                RADAR_FRAME_DELAY
+            );
+    }
+
+    function advanceObservedFrame() {
+
+        currentRadarFrame++;
+
+        displayRadarFrame(
+            currentRadarFrame
+        );
+
+        if (
+            currentRadarFrame >=
+            newestObservedIndex
+        ) {
+            /*
+             * We've reached NOW again.
+             * Hold here before forecast.
+             */
+            radarAnimationTimer =
+                setTimeout(
+                    startForecastPlayback,
+                    RADAR_NOW_PAUSE
+                );
+
+            return;
+        }
+
+        radarAnimationTimer =
+            setTimeout(
+                advanceObservedFrame,
+                RADAR_FRAME_DELAY
+            );
+    }
+
+    function startForecastPlayback() {
+
+        /*
+         * If forecast data isn't available,
+         * simply restart the cycle.
+         */
+        if (
+            firstForecastIndex >
+            lastFrameIndex
+        ) {
+            radarAnimationTimer =
+                setTimeout(
+                    startCombinedCycle,
+                    RADAR_FORECAST_END_PAUSE
+                );
+
+            return;
+        }
+
+        currentRadarFrame =
+            firstForecastIndex;
+
+        displayRadarFrame(
+            currentRadarFrame
+        );
+
+        radarAnimationTimer =
+            setTimeout(
+                advanceForecastFrame,
+                RADAR_FRAME_DELAY
+            );
+    }
+
+    function advanceForecastFrame() {
+
+        currentRadarFrame++;
+
+        /*
+         * Forecast is complete.
+         * Hold the endpoint, then return
+         * directly to NOW.
+         */
+        if (
+            currentRadarFrame >
+            lastFrameIndex
+        ) {
+            currentRadarFrame =
+                lastFrameIndex;
+
+            radarAnimationTimer =
+                setTimeout(
+                    startCombinedCycle,
+                    RADAR_FORECAST_END_PAUSE
+                );
+
+            return;
+        }
+
+        displayRadarFrame(
+            currentRadarFrame
+        );
+
+        if (
+            currentRadarFrame ===
+            lastFrameIndex
+        ) {
+            radarAnimationTimer =
+                setTimeout(
+                    startCombinedCycle,
+                    RADAR_FORECAST_END_PAUSE
+                );
+
+            return;
+        }
+
+        radarAnimationTimer =
+            setTimeout(
+                advanceForecastFrame,
+                RADAR_FRAME_DELAY
+            );
+    }
+
+    /*
+     * Begin every new COMBINED animation
+     * from current observed conditions.
+     */
+    startCombinedCycle();
 }
 
 function stopRadarAnimation() {
@@ -3909,6 +4109,7 @@ function stopRadarAnimation() {
 }
 
 // User Interface
+
 function updateRadarTimestamp(frame) {
     const timestampDisplay =
         document.getElementById(
@@ -3948,13 +4149,111 @@ function updateRadarTimestamp(frame) {
             hourCycle: "h23"
         });
 
-    const frameLabel =
-        frame.frameType === "FORECAST"
-            ? "FORECAST"
-            : "OBSERVED";
+    /*
+     * The newest observed radar frame is our
+     * timeline anchor — effectively "NOW"
+     * for radar playback purposes.
+     */
+    const newestObservedFrame =
+        observedRadarFrames[
+            observedRadarFrames.length - 1
+        ];
 
-    timestampDisplay.textContent =
-        `${timeText} • ${frameLabel}`;
+    const anchorTime =
+        newestObservedFrame?.time;
+
+    if (
+        typeof anchorTime !== "number"
+    ) {
+        const frameLabel =
+            frame.frameType === "FORECAST"
+                ? "FORECAST"
+                : "OBSERVED";
+
+        timestampDisplay.textContent =
+            `${timeText} • ${frameLabel}`;
+
+        return;
+    }
+
+    const offsetMinutes =
+        Math.round(
+            (frame.time - anchorTime) / 60
+        );
+
+    /*
+     * Latest observed frame.
+     */
+    if (
+        frame.frameType === "OBSERVED" &&
+        offsetMinutes === 0
+    ) {
+        timestampDisplay.innerHTML =
+            `<span class="radar-time-primary">
+                ${timeText} • NOW
+            </span>`;
+
+        return;
+    }
+
+    /*
+     * Historical observed radar.
+     */
+    if (frame.frameType === "OBSERVED") {
+        const absoluteMinutes =
+            Math.abs(offsetMinutes);
+
+        timestampDisplay.innerHTML =
+            `
+                <span class="radar-time-primary">
+                    ${timeText} • OBSERVED
+                </span>
+                <span class="radar-time-offset">
+                    -${formatRadarOffset(
+                        absoluteMinutes
+                    )}
+                </span>
+            `;
+
+        return;
+    }
+
+    /*
+     * Forecast radar.
+     */
+    timestampDisplay.innerHTML =
+            `
+                <span class="radar-time-primary">
+                    ${timeText} • FORECAST
+                </span>
+                <span class="radar-time-offset">
+                    +${formatRadarOffset(
+                    Math.max(0, offsetMinutes)
+                    )}
+                </span>
+            `;
+}
+
+function formatRadarOffset(totalMinutes) {
+    if (totalMinutes < 60) {
+        return `${totalMinutes} MIN`;
+    }
+
+    const hours =
+        Math.floor(totalMinutes / 60);
+
+    const minutes =
+        totalMinutes % 60;
+
+    if (minutes === 0) {
+        return hours === 1
+            ? "1 HR"
+            : `${hours} HR`;
+    }
+
+    return (
+        `${hours} HR ${minutes} MIN`
+    );
 }
 
 function initializeRadarControls() {
