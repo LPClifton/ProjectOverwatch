@@ -38,7 +38,7 @@ main {
 }
 
 .panel {
-border: 2px solid var(--system-accent, #4fd5ff);
+    border: 2px solid var(--system-accent, #4fd5ff);
     border-radius: 8px;
     background: #111;
     padding: 20px;
@@ -119,10 +119,8 @@ border: 2px solid var(--system-accent, #4fd5ff);
     line-height: 42px;
     text-align: center;
     color: #ffd700;
-    filter: 
-        drop-shadow(0 0 4px #ffffff)
-        drop-shadow(0 0 10px #ffff00)
-        drop-shadow(0 0 20px #ffcc00)
+    filter:
+        drop-shadow(0 0 4px #ffffff) drop-shadow(0 0 10px #ffff00) drop-shadow(0 0 20px #ffcc00)
 }
 
 #export-log-btn {
@@ -158,10 +156,7 @@ border: 2px solid var(--system-accent, #4fd5ff);
 
     display: grid;
     grid-template-columns:
-        minmax(180px, 1fr)
-        auto
-        minmax(180px, 1fr)
-        auto;
+        minmax(180px, 1fr) auto minmax(180px, 1fr) auto;
     align-items: center;
     gap: 20px;
 
@@ -335,9 +330,7 @@ body.map-open {
 #radar-status-row {
     display: grid;
     grid-template-columns:
-        auto
-        minmax(0, 1fr)
-        auto;
+        auto minmax(0, 1fr) auto;
     align-items: stretch;
     gap: 10px;
 
@@ -369,8 +362,7 @@ body.map-open {
         transform 0.3s ease;
 }
 
-#map-controls.radar-controls-collapsed
-#radar-action-row {
+#map-controls.radar-controls-collapsed #radar-action-row {
     max-height: 0;
 
     opacity: 0;
@@ -404,8 +396,7 @@ body.map-open {
     padding: 0 8px;
 
     border:
-        1px solid
-        var(--system-accent);
+        1px solid var(--system-accent);
 
     border-radius: 8px;
 
@@ -426,8 +417,7 @@ body.map-open {
     padding-left: 14px;
 
     border-left:
-        1px solid
-        rgba(79, 213, 255, 0.28);
+        1px solid rgba(79, 213, 255, 0.28);
 }
 
 #toggle-radar-controls {
@@ -464,8 +454,7 @@ body.map-open {
     padding: 0;
 
     border:
-        1px solid
-        var(--system-accent);
+        1px solid var(--system-accent);
 
     border-radius: 50%;
 
@@ -495,8 +484,7 @@ body.map-open {
  * Override the general circular shape so the
  * radar toggle matches the Time box.
  */
-#map-controls
-#toggle-radar-controls {
+#map-controls #toggle-radar-controls {
     width: 58px;
     height: auto;
     min-height: 44px;
@@ -525,9 +513,7 @@ body.map-open {
 @media screen and (max-width: 900px) {
     #radar-status-row {
         grid-template-columns:
-            auto
-            minmax(0, 1fr)
-            auto;
+            auto minmax(0, 1fr) auto;
     }
 
     #radar-action-row {
@@ -548,8 +534,7 @@ body.map-open {
         height: 42px;
     }
 
-    #map-controls
-    #toggle-radar-controls {
+    #map-controls #toggle-radar-controls {
         width: 58px;
         height: auto;
         min-height: 42px;
@@ -576,8 +561,7 @@ body.map-open {
         font-size: 17px;
     }
 
-    #map-controls
-    #toggle-radar-controls {
+    #map-controls #toggle-radar-controls {
         width: 54px;
         height: auto;
         min-height: 40px;
@@ -596,8 +580,7 @@ body.map-open {
     padding: 8px 12px;
 
     border:
-        1px solid
-        var(--system-accent);
+        1px solid var(--system-accent);
 
     border-radius: 8px;
 
@@ -633,11 +616,8 @@ body.map-open {
     padding: 8px 12px;
 
     border:
-        1px solid
-        var(
-            --radar-freshness-border,
-            var(--system-accent)
-        );
+        1px solid var(--radar-freshness-border,
+            var(--system-accent));
 
     border-radius: 8px;
 
@@ -715,23 +695,19 @@ body.map-open {
     color: #4fd5ff;
 
     animation:
-        radar-status-pulse
-        1.2s ease-in-out
-        infinite;
+        radar-status-pulse 1.2s ease-in-out infinite;
 }
 
 /* Compact layers menu for wide landscape screens */
 @media screen and (orientation: landscape) {
-    #map-panel.fullscreen-map
-    .leaflet-control-layers-expanded {
+    #map-panel.fullscreen-map .leaflet-control-layers-expanded {
         max-width: 240px;
         max-height: calc(100vh - 32px);
         overflow-y: auto;
         font-size: 14px;
     }
 
-    #map-panel.fullscreen-map
-    .leaflet-control-layers-toggle {
+    #map-panel.fullscreen-map .leaflet-control-layers-toggle {
         width: 42px;
         height: 42px;
         background-size: 24px 24px;
@@ -794,15 +770,13 @@ body.map-open {
     color: #4fd5ff;
 
     animation:
-        radar-status-pulse
-        1.2s ease-in-out
-        infinite;
+        radar-status-pulse 1.2s ease-in-out infinite;
 }
 
 
 /* ================================
     Map Marker Icons
-================================ */  
+================================ */
 
 .overwatch-location-icon,
 .overwatch-walking-icon,
@@ -868,6 +842,24 @@ body.map-open {
     }
 }
 
+#radar-timestamp {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.15;
+}
+
+.radar-time-primary {
+    display: block;
+}
+
+.radar-time-offset {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.8em;
+    opacity: 0.8;
+}
+
 /* ================================
    Alert Panel States
 ================================ */
@@ -885,17 +877,17 @@ body.map-open {
 
 #alerts-panel.alert-medium {
     border-color: #ffd700;
-    box-shadow: 0 0 14px rgba(255,215,0,0.35);
+    box-shadow: 0 0 14px rgba(255, 215, 0, 0.35);
 }
 
 #alerts-panel.alert-high {
     border-color: #ff8c00;
-    box-shadow: 0 0 16px rgba(255,140,0,0.45);
+    box-shadow: 0 0 16px rgba(255, 140, 0, 0.45);
 }
 
 #alerts-panel.alert-critical {
     border-color: #ff3030;
-    box-shadow: 0 0 20px rgba(255,48,48,0.60);
+    box-shadow: 0 0 20px rgba(255, 48, 48, 0.60);
 }
 
 #alerts-status.alert-clear {
@@ -1064,63 +1056,64 @@ body.map-open {
         min-height: 320px;
         max-height: 520px;
     }
-    
+
     #map-controls {
-    gap: 6px;
-}
+        gap: 6px;
+    }
 
-#radar-action-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    #radar-action-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
 
-    gap: 8px;
-    width: 100%;
+        gap: 8px;
+        width: 100%;
 
-    flex-wrap: nowrap;
-}
+        flex-wrap: nowrap;
+    }
 
-#radar-controls {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
+    #radar-controls {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
 
-    gap: 8px;
+        gap: 8px;
 
-    width: auto;
-    flex: 1 1 auto;
+        width: auto;
+        flex: 1 1 auto;
 
-    flex-wrap: nowrap;
-}
+        flex-wrap: nowrap;
+    }
 
-#map-utility-controls {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
+    #map-utility-controls {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
 
-    gap: 8px;
+        gap: 8px;
 
-    flex: 0 0 auto;
-    flex-wrap: nowrap;
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
 
-    padding-left: 8px;
-}
+        padding-left: 8px;
+    }
 
-#map-zoom-level {
-    white-space: nowrap;
-}
+    #map-zoom-level {
+        white-space: nowrap;
+    }
 
-#map-controls button {
-    width: 40px;
-    height: 40px;
+    #map-controls button {
+        width: 40px;
+        height: 40px;
 
-    flex: 0 0 40px;
-}
+        flex: 0 0 40px;
+    }
 
     #radar-timestamp {
         box-sizing: border-box;
         text-align: center;
     }
+
     #system-footer {
         grid-template-columns: 1fr auto;
         gap: 4px 10px;
@@ -1181,12 +1174,11 @@ body.map-open {
 #radar-timestamp.radar-refreshing {
     color: #4fd5ff;
     animation:
-        radar-status-pulse
-        1.2s ease-in-out
-        infinite;
+        radar-status-pulse 1.2s ease-in-out infinite;
 }
 
 @keyframes radar-status-pulse {
+
     0%,
     100% {
         opacity: 0.55;
@@ -1225,7 +1217,7 @@ body.map-open {
 
     border-radius: 8px;
 
-    background: rgba(20,20,20,.90);
+    background: rgba(20, 20, 20, .90);
 
     border: 1px solid #4fd5ff;
 
@@ -1383,8 +1375,7 @@ body.map-open {
 /*
  * Improve label readability in the dark interface.
  */
-#map-panel.fullscreen-map
-.leaflet-control-layers label {
+#map-panel.fullscreen-map .leaflet-control-layers label {
     color: #ffffff;
 }
 
@@ -1392,8 +1383,7 @@ body.map-open {
  * Keep the upper-left Leaflet control group
  * within the visible fullscreen map.
  */
-#map-panel.fullscreen-map
-.leaflet-top.leaflet-left {
+#map-panel.fullscreen-map .leaflet-top.leaflet-left {
     top: 12px;
     left: 12px;
     z-index: 2100;
@@ -1403,9 +1393,7 @@ body.map-open {
    FULLSCREEN — PHONE LANDSCAPE CONTROLS
    ========================================= */
 
-@media screen and
-       (orientation: landscape) and
-       (max-height: 500px) {
+@media screen and (orientation: landscape) and (max-height: 500px) {
 
     #map-panel.fullscreen-map #map-controls {
         left: 10px;
@@ -1430,8 +1418,7 @@ body.map-open {
         display: grid;
 
         grid-template-columns:
-            100px
-            minmax(0, 1fr);
+            100px minmax(0, 1fr);
 
         gap: 6px;
 
@@ -1464,17 +1451,14 @@ body.map-open {
         overflow: hidden;
     }
 
-    #map-panel.fullscreen-map
-    .radar-freshness-primary,
-    #map-panel.fullscreen-map
-    .radar-freshness-secondary {
+    #map-panel.fullscreen-map .radar-freshness-primary,
+    #map-panel.fullscreen-map .radar-freshness-secondary {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
-    #map-panel.fullscreen-map
-    #toggle-radar-controls {
+    #map-panel.fullscreen-map #toggle-radar-controls {
         position: absolute;
 
         top: 0;
