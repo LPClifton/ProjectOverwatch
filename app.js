@@ -4149,11 +4149,6 @@ function updateRadarTimestamp(frame) {
             hourCycle: "h23"
         });
 
-    /*
-     * The newest observed radar frame is our
-     * timeline anchor — effectively "NOW"
-     * for radar playback purposes.
-     */
     const newestObservedFrame =
         observedRadarFrames[
             observedRadarFrames.length - 1
@@ -4162,6 +4157,10 @@ function updateRadarTimestamp(frame) {
     const anchorTime =
         newestObservedFrame?.time;
 
+    /*
+     * Fallback if we don't yet have
+     * an observed-frame anchor.
+     */
     if (
         typeof anchorTime !== "number"
     ) {
@@ -4170,8 +4169,17 @@ function updateRadarTimestamp(frame) {
                 ? "FORECAST"
                 : "OBSERVED";
 
-        timestampDisplay.textContent =
-            `${timeText} • ${frameLabel}`;
+        timestampDisplay.innerHTML =
+            `
+                <span class="radar-time-primary">
+                    <span class="radar-time-value">
+                        ${timeText}
+                    </span>
+                    <span class="radar-time-layer">
+                        ${frameLabel}
+                    </span>
+                </span>
+            `;
 
         return;
     }
@@ -4182,16 +4190,23 @@ function updateRadarTimestamp(frame) {
         );
 
     /*
-     * Latest observed frame.
+     * Latest observed frame = NOW.
      */
     if (
         frame.frameType === "OBSERVED" &&
         offsetMinutes === 0
     ) {
         timestampDisplay.innerHTML =
-            `<span class="radar-time-primary">
-                ${timeText} • NOW
-            </span>`;
+            `
+                <span class="radar-time-primary">
+                    <span class="radar-time-value">
+                        ${timeText}
+                    </span>
+                    <span class="radar-time-layer">
+                        NOW
+                    </span>
+                </span>
+            `;
 
         return;
     }
@@ -4206,8 +4221,14 @@ function updateRadarTimestamp(frame) {
         timestampDisplay.innerHTML =
             `
                 <span class="radar-time-primary">
-                    ${timeText} • OBSERVED
+                    <span class="radar-time-value">
+                        ${timeText}
+                    </span>
+                    <span class="radar-time-layer">
+                        OBSERVED
+                    </span>
                 </span>
+
                 <span class="radar-time-offset">
                     -${formatRadarOffset(
                         absoluteMinutes
@@ -4222,16 +4243,25 @@ function updateRadarTimestamp(frame) {
      * Forecast radar.
      */
     timestampDisplay.innerHTML =
-            `
-                <span class="radar-time-primary">
-                    ${timeText} • FORECAST
+        `
+            <span class="radar-time-primary">
+                <span class="radar-time-value">
+                    ${timeText}
                 </span>
-                <span class="radar-time-offset">
-                    +${formatRadarOffset(
-                    Math.max(0, offsetMinutes)
-                    )}
+                <span class="radar-time-layer">
+                    FORECAST
                 </span>
-            `;
+            </span>
+
+            <span class="radar-time-offset">
+                +${formatRadarOffset(
+                    Math.max(
+                        0,
+                        offsetMinutes
+                    )
+                )}
+            </span>
+        `;
 }
 
 function formatRadarOffset(totalMinutes) {
