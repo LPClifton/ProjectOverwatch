@@ -845,19 +845,50 @@ body.map-open {
 #radar-timestamp {
     display: flex;
     flex-direction: column;
+    justify-content: center;
     align-items: center;
+
+    min-width: 190px;
+    padding: 10px 14px;
+
     line-height: 1.15;
+    text-align: center;
+
+    box-sizing: border-box;
 }
 
 .radar-time-primary {
-    display: block;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 7px;
+
+    white-space: nowrap;
+}
+
+.radar-time-value {
+    font-size: 1.05em;
+    font-weight: 700;
+}
+
+.radar-time-layer {
+    font-size: 0.95em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+
+    color: var(--system-accent);
 }
 
 .radar-time-offset {
     display: block;
-    margin-top: 2px;
-    font-size: 0.8em;
-    opacity: 0.8;
+
+    margin-top: 5px;
+
+    font-size: 0.82em;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+
+    opacity: 0.9;
 }
 
 /* ================================
