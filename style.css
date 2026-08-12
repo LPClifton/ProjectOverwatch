@@ -1449,7 +1449,7 @@ body.map-open {
         display: grid;
 
         grid-template-columns:
-            100px minmax(0, 1fr);
+            150px minmax(0, 1fr);
 
         gap: 6px;
 
@@ -1469,7 +1469,6 @@ body.map-open {
         box-sizing: border-box;
 
         font-size: 12px;
-        white-space: nowrap;
     }
 
     #map-panel.fullscreen-map #radar-freshness {
