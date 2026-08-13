@@ -73,9 +73,18 @@ const AIRCRAFT_RADIUS_NM =
     AIRCRAFT_RADIUS_MILES / 1.15078;
 
 const AIRCRAFT_REFRESH_INTERVAL_MS =
-    5 * 60 * 1000; 
+    10 * 1000; 
     
-let aircraftTrackingStarted = false;    
+let aircraftTrackingStarted = false; 
+
+const AIRCRAFT_MOTION_INTERVAL_MS =
+    1000;
+
+const AIRCRAFT_MAX_EXTRAPOLATION_SECONDS =
+    90;
+
+const AIRCRAFT_POSITION_CORRECTION_MS =
+    5 * 1000;
 
 
 
@@ -170,6 +179,8 @@ function initializeAircraftLayer() {
         "✈️ Aircraft"
     );
 
+    startAircraftMotionManager();
+
     console.log("Aircraft layer ready.");
 }
 
@@ -200,6 +211,7 @@ let previousWeatherRadar;
 let lightningLayer;
 let aircraftLayer;
 const aircraftMarkers = new Map();
+let aircraftMotionTimer = null;
 let warningsLayer;
 let layerControl;
 let observedRadarFrames = [];
@@ -1283,6 +1295,213 @@ async function fetchNearbyAircraft() {
     }
 }
 
+function projectAircraftPosition(
+    latitude,
+    longitude,
+    trackDegrees,
+    distanceMiles
+) {
+    const earthRadiusMiles =
+        3958.8;
+
+    const angularDistance =
+        distanceMiles /
+        earthRadiusMiles;
+
+    const bearing =
+        trackDegrees *
+        Math.PI /
+        180;
+
+    const latitude1 =
+        latitude *
+        Math.PI /
+        180;
+
+    const longitude1 =
+        longitude *
+        Math.PI /
+        180;
+
+    const latitude2 =
+        Math.asin(
+            Math.sin(latitude1) *
+                Math.cos(angularDistance) +
+            Math.cos(latitude1) *
+                Math.sin(angularDistance) *
+                Math.cos(bearing)
+        );
+
+    const longitude2 =
+        longitude1 +
+        Math.atan2(
+            Math.sin(bearing) *
+                Math.sin(angularDistance) *
+                Math.cos(latitude1),
+
+            Math.cos(angularDistance) -
+                Math.sin(latitude1) *
+                Math.sin(latitude2)
+        );
+
+    return {
+        latitude:
+            latitude2 *
+            180 /
+            Math.PI,
+
+        longitude:
+            (
+                (
+                    longitude2 *
+                    180 /
+                    Math.PI +
+                    540
+                ) %
+                360
+            ) -
+            180
+    };
+}
+
+function updateAircraftMotion() {
+    const nowSeconds =
+        Date.now() / 1000;
+
+    for (
+        const aircraft of
+        aircraftMarkers.values()
+    ) {
+        const plane =
+            aircraft.data;
+
+        if (
+            !plane ||
+            typeof plane.latitude !== "number" ||
+            typeof plane.longitude !== "number"
+        ) {
+            continue;
+        }
+
+        const observationTime =
+            plane.lastPositionTime ??
+            plane.lastContactTime;
+
+        if (
+            typeof observationTime !== "number" ||
+            typeof plane.speedKnots !== "number" ||
+            typeof plane.trackDegrees !== "number" ||
+            plane.onGround
+        ) {
+            continue;
+        }
+
+        const rawElapsedSeconds =
+            nowSeconds -
+            observationTime;
+
+        const elapsedSeconds =
+            Math.max(
+                0,
+                Math.min(
+                    rawElapsedSeconds,
+                    AIRCRAFT_MAX_EXTRAPOLATION_SECONDS
+                )
+            );
+
+        const speedMilesPerHour =
+            plane.speedKnots *
+            1.15078;
+
+        const distanceMiles =
+            speedMilesPerHour *
+            elapsedSeconds /
+            3600;
+
+        const projectedPosition =
+            projectAircraftPosition(
+                plane.latitude,
+                plane.longitude,
+                plane.trackDegrees,
+                distanceMiles
+            );
+
+        let displayLatitude =
+    projectedPosition.latitude;
+
+let displayLongitude =
+    projectedPosition.longitude;
+
+if (aircraft.correction) {
+    const correctionProgress =
+        Math.min(
+            1,
+            (
+                Date.now() -
+                aircraft.correction.startedAt
+            ) /
+            AIRCRAFT_POSITION_CORRECTION_MS
+        );
+
+    const easedProgress =
+        correctionProgress *
+        correctionProgress *
+        (
+            3 -
+            2 * correctionProgress
+        );
+
+    displayLatitude =
+        aircraft.correction.startLatitude +
+        (
+            projectedPosition.latitude -
+            aircraft.correction.startLatitude
+        ) *
+        easedProgress;
+
+    displayLongitude =
+        aircraft.correction.startLongitude +
+        (
+            projectedPosition.longitude -
+            aircraft.correction.startLongitude
+        ) *
+        easedProgress;
+
+    if (correctionProgress >= 1) {
+        aircraft.correction = null;
+    }
+}
+
+aircraft.marker.setLatLng([
+    displayLatitude,
+    displayLongitude
+]);
+
+        aircraft.estimatedPosition = {
+            ...projectedPosition
+        };
+
+        aircraft.estimatedAt =
+            Date.now();
+    }
+}
+
+function startAircraftMotionManager() {
+    if (aircraftMotionTimer) {
+        return;
+    }
+
+    aircraftMotionTimer =
+        setInterval(
+            updateAircraftMotion,
+            AIRCRAFT_MOTION_INTERVAL_MS
+        );
+
+    console.log(
+        "[Aircraft] Motion manager started."
+    );
+}
+
 function displayAircraft(aircraft) {
     if (!aircraftLayer) {
         console.warn(
@@ -1397,49 +1616,130 @@ function displayAircraft(aircraft) {
             Distance: ${distance}
         `;
 
-        const existingAircraft =
-            aircraftMarkers.get(icao24);
+    const existingAircraft =
+    aircraftMarkers.get(icao24);
 
-        if (existingAircraft) {
-            existingAircraft.marker.setLatLng([
+const observationTime =
+    plane.lastPositionTime ??
+    plane.lastContactTime ??
+    null;
+
+const newPosition = {
+    latitude:
+        plane.latitude,
+
+    longitude:
+        plane.longitude,
+
+    observationTime
+};
+
+if (existingAircraft) {
+    const positionChanged =
+        existingAircraft.currentPosition.latitude !==
+            plane.latitude ||
+        existingAircraft.currentPosition.longitude !==
+            plane.longitude;
+
+    const observationChanged =
+        observationTime !== null &&
+        observationTime !==
+            existingAircraft.currentPosition
+                .observationTime;
+
+    if (
+        positionChanged ||
+        observationChanged
+    ) {
+
+        const displayedPosition =
+    existingAircraft.marker.getLatLng();
+
+existingAircraft.correction = {
+    startedAt:
+        Date.now(),
+
+    startLatitude:
+        displayedPosition.lat,
+
+    startLongitude:
+        displayedPosition.lng
+};
+        existingAircraft.previousPosition = {
+            ...existingAircraft.currentPosition
+        };
+
+        existingAircraft.currentPosition = {
+            ...newPosition
+        };
+
+        existingAircraft.updatedAt =
+            Date.now();
+
+
+        console.log(
+            `[Aircraft] Position update • ${callsign}`,
+            {
+                previous:
+                    existingAircraft
+                        .previousPosition,
+
+                current:
+                    existingAircraft
+                        .currentPosition
+            }
+        );
+    }
+
+    existingAircraft.marker.setIcon(
+        aircraftIcon
+    );
+
+    existingAircraft.marker.setPopupContent(
+        popupContent
+    );
+
+    existingAircraft.data =
+        plane;
+} else {
+    const marker =
+        L.marker(
+            [
                 plane.latitude,
                 plane.longitude
-            ]);
-
-            existingAircraft.marker.setIcon(
-                aircraftIcon
-            );
-
-            existingAircraft.marker.setPopupContent(
+            ],
+            {
+                icon: aircraftIcon
+            }
+        )
+            .addTo(aircraftLayer)
+            .bindPopup(
                 popupContent
             );
 
-            existingAircraft.data =
-                plane;
-        } else {
-            const marker =
-                L.marker(
-                    [
-                        plane.latitude,
-                        plane.longitude
-                    ],
-                    {
-                        icon: aircraftIcon
-                    }
-                )
-                    .addTo(aircraftLayer)
-                    .bindPopup(
-                        popupContent
-                    );
+    aircraftMarkers.set(
+        icao24,
+        {
+            marker,
 
-            aircraftMarkers.set(
-                icao24,
-                {
-                    marker,
-                    data: plane
-                }
-            );
+            data:
+                plane,
+
+            previousPosition:
+                null,
+
+            currentPosition: {
+                ...newPosition
+            },
+
+            updatedAt:
+                Date.now(),
+
+            correction:
+                null    
         }
+    );
+}    
     });
 
     for (
