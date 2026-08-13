@@ -63,6 +63,20 @@ const HRRR_FORECAST_STEP_MINUTES = 15;
 const HRRR_FORECAST_MAX_MINUTES =
     6 * 60;
 
+/* =========================================
+   AIR TRAFFIC
+========================================= */
+
+const AIRCRAFT_RADIUS_MILES = 50;
+
+const AIRCRAFT_RADIUS_NM =
+    AIRCRAFT_RADIUS_MILES / 1.15078;
+
+const AIRCRAFT_REFRESH_INTERVAL_MS =
+    5 * 60 * 1000; 
+    
+let aircraftTrackingStarted = false;    
+
 
 
 const SENTINEL_RADIUS_MILES = 250;
@@ -145,6 +159,20 @@ const SENTINEL_RELEVANCE_WEIGHTS = {
     longDuration: 15
 };
 
+function initializeAircraftLayer() {
+    console.log("Initializing aircraft layer...");
+
+    aircraftLayer =
+        L.layerGroup().addTo(radarMap);
+
+    layerControl.addOverlay(
+        aircraftLayer,
+        "✈️ Aircraft"
+    );
+
+    console.log("Aircraft layer ready.");
+}
+
 
 // =============================
 // Global Variables
@@ -170,6 +198,8 @@ let accuracyCircle;
 let weatherRadar;
 let previousWeatherRadar;
 let lightningLayer;
+let aircraftLayer;
+const aircraftMarkers = new Map();
 let warningsLayer;
 let layerControl;
 let observedRadarFrames = [];
@@ -1141,6 +1171,341 @@ const walkingLocationIcon = L.divIcon({
     iconSize: [28, 28],
     iconAnchor: [14, 14]
 });
+
+// =============================
+// Air Craft Tracker
+// =============================
+
+async function fetchNearbyAircraft() {
+    if (
+        typeof currentLatitude !== "number" ||
+        typeof currentLongitude !== "number"
+    ) {
+        console.log(
+            "[Aircraft] Waiting for GPS position..."
+        );
+
+        return;
+    }
+
+    const url =
+        `https://saved-shine-request-develop.trycloudflare.com/aircraft` +
+        `?lat=${currentLatitude}` +
+        `&lon=${currentLongitude}` +
+        `&radiusMiles=${AIRCRAFT_RADIUS_MILES}`;
+
+    console.log(
+        "[Aircraft] Requesting nearby aircraft:",
+        {
+            latitude: currentLatitude,
+            longitude: currentLongitude,
+            radiusMiles: AIRCRAFT_RADIUS_MILES
+        }
+    );
+
+    try {
+        const response =
+            await fetch(url);
+
+        if (!response.ok) {
+            throw new Error(
+                `HTTP ${response.status}`
+            );
+        }
+
+        const data =
+            await response.json();
+
+        const aircraft =
+            Array.isArray(data.aircraft)
+                ? data.aircraft
+                : [];
+
+        console.log(
+            `[Aircraft] ${aircraft.length} aircraft found`
+        );
+
+        console.table(
+            aircraft.map((plane) => ({
+                callsign:
+                    plane.callsign ||
+                    "UNKNOWN",
+
+                icao24:
+                    plane.icao24 ||
+                    "UNKNOWN",
+
+                altitude:
+                    plane.altitudeFeet ??
+                    "UNKNOWN",
+
+                speed:
+                    plane.speedKnots ??
+                    "UNKNOWN",
+
+                heading:
+                    plane.trackDegrees ??
+                    "UNKNOWN",
+
+                latitude:
+                    plane.latitude ??
+                    "UNKNOWN",
+
+                longitude:
+                    plane.longitude ??
+                    "UNKNOWN",
+
+                distanceMiles:
+                    plane.distanceMiles ??
+                    "UNKNOWN",
+
+                verticalRate:
+                    plane.verticalRateFeetPerMinute ??
+                    "UNKNOWN",
+
+                squawk:
+                    plane.squawk ??
+                    "UNKNOWN"
+            }))
+        );
+
+        displayAircraft(aircraft);
+
+        return aircraft;
+    }
+    catch (error) {
+        console.error(
+            "[Aircraft] Fetch failed:",
+            error
+        );
+
+        return [];
+    }
+}
+
+function displayAircraft(aircraft) {
+    if (!aircraftLayer) {
+        console.warn(
+            "[Aircraft] Layer not initialized."
+        );
+        return;
+    }
+
+    const seenAircraft =
+        new Set();
+
+    aircraft.forEach((plane) => {
+        if (
+            typeof plane.latitude !== "number" ||
+            typeof plane.longitude !== "number" ||
+            !plane.icao24
+        ) {
+            return;
+        }
+
+        const icao24 =
+            plane.icao24;
+
+        seenAircraft.add(icao24);
+
+        const trackDegrees =
+            typeof plane.trackDegrees === "number"
+                ? plane.trackDegrees
+                : 0;
+
+        const aircraftIcon = L.divIcon({
+            className: "aircraft-marker",
+
+            html: `
+                <svg
+                    width="32"
+                    height="32"
+                    viewBox="0 0 32 32"
+                    style="
+                        display: block;
+                        transform: rotate(${trackDegrees}deg);
+                        transform-origin: 50% 50%;
+                    "
+                >
+                    <path
+                        d="
+                            M16 2
+                            L19 12
+                            L28 16
+                            L28 19
+                            L19 17
+                            L18 27
+                            L22 29
+                            L22 31
+                            L16 29
+                            L10 31
+                            L10 29
+                            L14 27
+                            L13 17
+                            L4 19
+                            L4 16
+                            L13 12
+                            Z
+                        "
+                        fill="white"
+                        stroke="black"
+                        stroke-width="1"
+                    />
+                </svg>
+            `,
+
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+        });
+
+        const callsign =
+            plane.callsign ||
+            plane.icao24 ||
+            "UNKNOWN";
+
+        const altitude =
+            plane.altitudeFeet !== null
+                ? `${Math.round(
+                    plane.altitudeFeet
+                ).toLocaleString()} ft`
+                : "Unknown";
+
+        const speed =
+            plane.speedKnots !== null
+                ? `${Math.round(
+                    plane.speedKnots
+                )} kt`
+                : "Unknown";
+
+        const distance =
+            plane.distanceMiles !== null
+                ? `${plane.distanceMiles.toFixed(1)} mi`
+                : "Unknown";
+
+        const popupContent = `
+            <strong>${callsign}</strong><br>
+            ICAO: ${plane.icao24}<br>
+            Altitude: ${altitude}<br>
+            Speed: ${speed}<br>
+            Track: ${
+                typeof plane.trackDegrees === "number"
+                    ? `${Math.round(
+                        plane.trackDegrees
+                    )}°`
+                    : "Unknown"
+            }<br>
+            Distance: ${distance}
+        `;
+
+        const existingAircraft =
+            aircraftMarkers.get(icao24);
+
+        if (existingAircraft) {
+            existingAircraft.marker.setLatLng([
+                plane.latitude,
+                plane.longitude
+            ]);
+
+            existingAircraft.marker.setIcon(
+                aircraftIcon
+            );
+
+            existingAircraft.marker.setPopupContent(
+                popupContent
+            );
+
+            existingAircraft.data =
+                plane;
+        } else {
+            const marker =
+                L.marker(
+                    [
+                        plane.latitude,
+                        plane.longitude
+                    ],
+                    {
+                        icon: aircraftIcon
+                    }
+                )
+                    .addTo(aircraftLayer)
+                    .bindPopup(
+                        popupContent
+                    );
+
+            aircraftMarkers.set(
+                icao24,
+                {
+                    marker,
+                    data: plane
+                }
+            );
+        }
+    });
+
+    for (
+        const [
+            icao24,
+            aircraft
+        ] of aircraftMarkers
+    ) {
+        if (!seenAircraft.has(icao24)) {
+            aircraftLayer.removeLayer(
+                aircraft.marker
+            );
+
+            aircraftMarkers.delete(
+                icao24
+            );
+        }
+    }
+
+    console.log(
+        `[Aircraft] Displayed ${aircraft.length} aircraft`
+    );
+
+    console.log(
+        `[Aircraft] Tracking ${aircraftMarkers.size} persistent markers`
+    );
+}
+
+function exportDiagnosticLog() {
+    diagnosticLog("Diagnostics", {
+        event: "Log exported",
+        entryCount: diagnosticLogEntries.length
+    });
+
+    const logData = {
+        exportedAt: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        entries: diagnosticLogEntries
+    };
+
+    const blob = new Blob(
+        [JSON.stringify(logData, null, 2)],
+        { type: "application/json" }
+    );
+
+    const url = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
+
+    const timestamp = new Date()
+        .toISOString()
+        .replaceAll(":", "-")
+        .replaceAll(".", "-");
+
+    downloadLink.href = url;
+    downloadLink.download =
+        `overwatch-diagnostics-${timestamp}.json`;
+
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+
+    setTimeout(() => {
+        URL.revokeObjectURL(url);
+    }, 1000);
+}
+
 
 // =============================
 // Diagnostics Logger
@@ -2990,6 +3355,17 @@ function initializeMap() {
                 currentLatitude = latitude;
                 currentLongitude = longitude;
 
+                if (!aircraftTrackingStarted) {
+    aircraftTrackingStarted = true;
+
+    fetchNearbyAircraft();
+
+    setInterval(
+        fetchNearbyAircraft,
+        AIRCRAFT_REFRESH_INTERVAL_MS
+    );
+}
+
                 const speedMetersPerSecond =
                     position.coords.speed;
 
@@ -4537,6 +4913,8 @@ function handleRadarZoomLimit() {
         );
     }
 }
+
+
 
 
 
@@ -6352,6 +6730,8 @@ initializeWeatherRadar();
 initializeRadarControls();
 
 initializeLightning();
+
+initializeAircraftLayer();
 
 startRadarFreshnessMonitor();
 
