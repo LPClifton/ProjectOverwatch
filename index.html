@@ -6,239 +6,228 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>OverWatch OS</title>
-    
+
     <link rel="stylesheet" href="style.css">
 
-    <link
-        rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-        crossorigin=""
-    >    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 </head>
 
 <body>
     <div id="app">
 
-    <header>
+        <header>
             <h1>PROJECT OVERWATCH</h1>
             <p>Mission Control Interface</p>
-    </header>
+        </header>
 
-    <div id="context-bar">
-        ⏳ Initializing Systems...
-    </div>
-    
-    <main>
+        <div id="context-bar">
+            ⏳ Initializing Systems...
+        </div>
 
-        <section class="panel weather-panel">
-            <h2>Weather</h2>
+        <main>
 
-            <p id="weather-status">Requesting location...</p>
+            <section class="panel">
+                <h2>System Status</h2>
+                <p id="system-status-text">Online</p>
+            </section>
 
-            <div id="weather-data" class="weather-data">
-                <div id="weather-temperature">--°F</div>
-                <div id="weather-condition">Waiting...</div>
+            <section class="panel weather-panel">
+                <h2>Weather</h2>
 
-                <p>Feels like: <span id="weather-feels-like">--°F</span></p> 
-                <p>Humidity: <span id="weather-humidity">--%</span></p>
-                <p>Wind: <span id="weather-wind">-- mph</span></p>
-                <p>Gusts: <span id="weather-gusts">-- mph</span></p>
-            </div>
-                
-        </section>
+                <p id="weather-status">Requesting location...</p>
 
-        <section class="panel">
-            <h2>System Status</h2>
-            <p id="system-status-text">Online</p>
-        </section>
+                <div id="weather-data" class="weather-data">
+                    <div id="weather-temperature">--°F</div>
+                    <div id="weather-condition">Waiting...</div>
 
-        <section class="panel" id="alerts-panel">
-            <h2 id="alerts-heading">Alerts</h2>
-            <p id="alerts-status">None</p>
-        </section>
+                    <p>Feels like: <span id="weather-feels-like">--°F</span></p>
+                    <p>Humidity: <span id="weather-humidity">--%</span></p>
+                    <p>Wind: <span id="weather-wind">-- mph</span></p>
+                    <p>Gusts: <span id="weather-gusts">-- mph</span></p>
+                </div>
 
-        <section class="panel">
-            <h2>Radio Scanner</h2>
-            <p>Loading...</p>
-        </section>
+            </section>
 
-        <section class="panel map-panel" id="map-panel">
-            <div class="panel-heading">
-                <h2>Map</h2>
-            </div>
+            <section class="panel" id="alerts-panel">
+                <h2 id="alerts-heading">Alerts</h2>
+                <p id="alerts-status">None</p>
+            </section>
 
-            <div class="map-container">
-                <div id="map"></div>
-                
-                <p id="map-status">
-                    Initializing map...
+            <section class="panel">
+                <h2>Radio Scanner</h2>
+                <p>Loading...</p>
+            </section>
+
+            <section class="panel map-panel" id="map-panel">
+                <div class="panel-heading">
+                    <h2>Map</h2>
+                </div>
+
+                <div class="map-container">
+                    <div id="map"></div>
+
+                    <p id="map-status">
+                        Initializing map...
+                    </p>
+
+                    <div id="map-controls" class="radar-controls-collapsed">
+                        <div id="radar-status-row">
+
+                            <span id="radar-timestamp">
+                                Loading...
+                            </span>
+
+                            <span id="radar-freshness">
+                                Checking radar...
+                            </span>
+
+                            <button id="toggle-radar-controls" type="button" aria-label="Show radar controls"
+                                aria-expanded="false" title="Show radar controls">
+                                🌧️
+                            </button>
+
+                        </div>
+
+                        <div id="radar-action-row">
+
+                            <div id="radar-controls">
+
+                                <button id="radar-prev" type="button" aria-label="Previous radar frame"
+                                    title="Previous radar frame">
+                                    ⏮️
+                                </button>
+
+                                <button id="radar-play" type="button" aria-label="Pause radar animation"
+                                    title="Pause radar animation">
+                                    ⏸️
+                                </button>
+
+                                <button id="radar-next" type="button" aria-label="Next radar frame"
+                                    title="Next radar frame">
+                                    ⏭️
+                                </button>
+
+                            </div>
+
+                            <div id="radar-mode-controls">
+
+                                <select id="radar-mode-select" aria-label="Radar playback mode"
+                                    title="Radar playback mode">
+                                    <option value="PAST">
+                                        Past
+                                    </option>
+
+                                    <option value="COMBINED" selected>
+                                        Both
+                                    </option>
+
+                                    <option value="FORECAST">
+                                        Forecast
+                                    </option>
+                                </select>
+
+                            </div>
+
+                            <div id="map-utility-controls">
+
+                                <span id="map-zoom-level">
+                                    Z--
+                                </span>
+
+                                <button id="expand-map-btn" type="button" aria-label="Expand map" title="Expand map">
+                                    <span class="fullscreen-icon">
+                                        ⛶
+                                    </span>
+                                </button>
+
+                                <button id="export-log-btn" type="button" aria-label="Export diagnostics"
+                                    title="Export diagnostics">
+                                    📝
+                                </button>
+
+                            </div>
+
+                        </div>
+                    </div>
+            </section>
+
+            <section class="panel aviation-panel" id="aviation-panel">
+                <h2>✈ Aviation</h2>
+
+                <p id="aviation-status">
+                    Aircraft feed online
                 </p>
 
-             <div
-    id="map-controls"
-    class="radar-controls-collapsed"
->
-    <div id="radar-status-row">
+                <div id="aviation-summary" class="aviation-summary">
+                    <p>
+                        Airborne:
+                        <span id="aviation-aircraft-count">
+                            --
+                        </span>
+                    </p>
 
-        <span id="radar-timestamp">
-            Loading...
-        </span>
+                    <p>
+                        Nearest:
+                        <span id="aviation-nearest-aircraft">
+                            --
+                        </span>
+                    </p>
+                </div>
 
-        <span id="radar-freshness">
-            Checking radar...
-        </span>
+                <div id="aviation-track" class="aviation-track">
+                    <p>
+                        Track:
+                        <span id="aviation-tracked-aircraft">
+                            None
+                        </span>
+                    </p>
+                </div>
+            </section>
 
-        <button
-            id="toggle-radar-controls"
-            type="button"
-            aria-label="Show radar controls"
-            aria-expanded="false"
-            title="Show radar controls"
-        >
-            🌧️
-        </button>
+            <section class="panel">
+                <h2>Notes</h2>
+                <p>No Notes.</p>
+            </section>
 
-    </div>
+            <section class="panel">
+                <h2>Camera</h2>
+                <p>Offline</p>
+            </section>
 
-    <div id="radar-action-row">
+            <section class="panel">
+                <h2>Tools</h2>
+                <p>Ready</p>
+            </section>
 
-        <div id="radar-controls">
+        </main>
 
-            <button
-                id="radar-prev"
-                type="button"
-                aria-label="Previous radar frame"
-                title="Previous radar frame"
-            >
-                ⏮️
-            </button>
+        <footer id="system-footer">
+            <span id="version-status">Project Overwatch v0.6.4</span>
 
-            <button
-                id="radar-play"
-                type="button"
-                aria-label="Pause radar animation"
-                title="Pause radar animation"
-            >
-                ⏸️
-            </button>
-
-            <button
-                id="radar-next"
-                type="button"
-                aria-label="Next radar frame"
-                title="Next radar frame"
-            >
-                ⏭️
-            </button>
-
-        </div>
-
-        <div id="radar-mode-controls">
-
-            <select
-                id="radar-mode-select"
-                aria-label="Radar playback mode"
-                title="Radar playback mode"
-            >
-                <option value="PAST">
-                    Past
-                </option>
-
-                <option
-                    value="COMBINED"
-                    selected
-                >
-                    Both
-                </option>
-
-                <option value="FORECAST">
-                    Forecast
-                </option>
-            </select>
-
-        </div>
-
-        <div id="map-utility-controls">
-
-            <span id="map-zoom-level">
-                Z--
+            <span id="build-date">
+                Build: 2026-08-14
             </span>
 
-            <button
-                id="expand-map-btn"
-                type="button"
-                aria-label="Expand map"
-                title="Expand map"
-            >
-                <span class="fullscreen-icon">
-                    ⛶
-                </span>
-            </button>
+            <span id="system-status">
+                Status: Operational
+            </span>
 
-            <button
-                id="export-log-btn"
-                type="button"
-                aria-label="Export diagnostics"
-                title="Export diagnostics"
-            >
-                📝
-            </button>
-
-        </div>
+            <time id="clock" datetime="">
+                --:--:--
+            </time>
+        </footer>
 
     </div>
-</div>  
-        </section>
 
-        <section class="panel">
-            <h2>Notes</h2>
-            <p>No Notes.</p>
-        </section>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
-        <section class="panel">
-            <h2>Camera</h2>
-            <p>Offline</p>
-        </section>
+    <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js">
+    </script>
 
-        <section class="panel">
-            <h2>Tools</h2>
-            <p>Ready</p>
-        </section>
+    <script src="app.js"></script>
 
-    </main>
+</body>
 
-    <footer id="system-footer">
-    <span id="version-status">Project Overwatch v0.6.4</span>
-
-    <span id="build-date">
-        Build: 2026-08-09
-    </span>
-
-    <span id="system-status">
-        Status: Operational
-    </span>
-
-    <time id="clock" datetime="">
-        --:--:--
-    </time>
-</footer>
-
-</div>
-
-<script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-></script>
-
-<script
-    src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js">
-</script>
-    
-<script src="app.js"></script>
-
-</body>    
 </html>
-
-
