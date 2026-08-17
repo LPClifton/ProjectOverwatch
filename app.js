@@ -1014,7 +1014,7 @@ async function fetchNearbyAircraft() {
   }
 
   const url =
-    `https://vii-calls-phenomenon-fraser.trycloudflare.com/aircraft` +
+    `https://attraction-render-roads-creative.trycloudflare.com/aircraft` +
     `?lat=${currentLatitude}` +
     `&lon=${currentLongitude}` +
     `&radiusMiles=${AIRCRAFT_RADIUS_MILES}`;
