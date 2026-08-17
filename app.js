@@ -956,6 +956,25 @@ function focusAircraftOnMap(icao24) {
     radarMap.removeLayer(accuracyCircle);
   }
 
+  const mapPanelElement =
+  document.getElementById("map-panel");
+
+const isFullscreen =
+  mapPanelElement?.classList.contains(
+    "fullscreen-map"
+  ) === true;
+
+if (
+  mapPanelElement &&
+  !isFullscreen
+) {
+  mapPanelElement.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+    inline: "nearest",
+  });
+}
+
   const aircraftPosition = aircraft.marker.getLatLng();
 
   const inspectionZoom = Math.min(radarMap.getZoom(), 11);
