@@ -13,6 +13,11 @@ const OPERATING_MODES = {
   DRIVING: "DRIVING",
 };
 
+const MAP_ZOOM_MODES = {
+  AUTO: "AUTO",
+  MANUAL: "MANUAL",
+};
+
 const DEFAULT_LATITUDE = 30.3027;
 const DEFAULT_LONGITUDE = -93.1907;
 const DEFAULT_MAP_ZOOM = 9;
@@ -145,7 +150,6 @@ const SENTINEL_RELEVANCE_WEIGHTS = {
   longDuration: 15,
 };
 
-
 // =============================
 // Global Variables
 // =============================
@@ -158,6 +162,11 @@ let currentLatitude = null;
 let currentLongitude = null;
 let currentHeading = null;
 let currentSpeedMph = 0;
+
+let mapZoomMode = MAP_ZOOM_MODES.AUTO;
+let manualMapZoom = null;
+let mapZoomInspectionActive = false;
+let mapAutoZoomUpdateActive = false;
 
 let drivingModeActive = false;
 let notificationSystemInitialized = false;
@@ -956,24 +965,20 @@ function focusAircraftOnMap(icao24) {
     radarMap.removeLayer(accuracyCircle);
   }
 
-  const mapPanelElement =
-  document.getElementById("map-panel");
+  mapZoomInspectionActive = true;
 
-const isFullscreen =
-  mapPanelElement?.classList.contains(
-    "fullscreen-map"
-  ) === true;
+  const mapPanelElement = document.getElementById("map-panel");
 
-if (
-  mapPanelElement &&
-  !isFullscreen
-) {
-  mapPanelElement.scrollIntoView({
-    behavior: "smooth",
-    block: "center",
-    inline: "nearest",
-  });
-}
+  const isFullscreen =
+    mapPanelElement?.classList.contains("fullscreen-map") === true;
+
+  if (mapPanelElement && !isFullscreen) {
+    mapPanelElement.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "nearest",
+    });
+  }
 
   const aircraftPosition = aircraft.marker.getLatLng();
 
@@ -993,7 +998,9 @@ if (
 
     const returnZoom =
       operatingMode === OPERATING_MODES.DRIVING
-        ? navigationIntelligenceManager.targetZoom
+        ? mapZoomMode === MAP_ZOOM_MODES.MANUAL && manualMapZoom !== null
+          ? manualMapZoom
+          : navigationIntelligenceManager.targetZoom
         : PARKED_MAP_ZOOM;
 
     radarMap.closePopup();
@@ -1018,6 +1025,8 @@ if (
 
         accuracyCircle.bringToFront();
       }
+
+      mapZoomInspectionActive = false;
     }, 1150);
   }, 1100 + AIRCRAFT_LOCATE_INSPECTION_MS);
 }
@@ -1897,6 +1906,78 @@ function updateAlertsPanel() {
 // Navigation Functions
 // =============================
 
+function resumeAutomaticMapZoom() {
+  mapZoomMode = MAP_ZOOM_MODES.AUTO;
+  manualMapZoom = null;
+  updateMapZoomModeControl();
+
+  diagnosticLog("Navigation", {
+    event: "Automatic zoom resumed",
+    targetZoom: navigationIntelligenceManager.targetZoom,
+  });
+
+  if (operatingMode === OPERATING_MODES.DRIVING) {
+    updateNavigationDisplay();
+  }
+}
+
+function updateMapZoomModeControl() {
+  const button = document.getElementById("map-zoom-mode-btn");
+
+  if (!button) {
+    return;
+  }
+
+  const isManual = mapZoomMode === MAP_ZOOM_MODES.MANUAL;
+
+  button.textContent = isManual ? "MANUAL" : "AUTO";
+
+  button.title = isManual
+    ? "Resume automatic driving zoom"
+    : "Automatic driving zoom active";
+
+  button.setAttribute(
+    "aria-label",
+    isManual
+      ? "Resume automatic driving zoom"
+      : "Automatic driving zoom active",
+  );
+}
+
+function initializeMapZoomModeControl() {
+  const zoomModeControl = L.control({
+    position: "bottomleft",
+  });
+
+  zoomModeControl.onAdd = function () {
+    const container = L.DomUtil.create(
+      "div",
+      "leaflet-bar overwatch-zoom-mode-control",
+    );
+
+    const button = L.DomUtil.create("button", "", container);
+
+    button.type = "button";
+    button.id = "map-zoom-mode-btn";
+    button.textContent = "AUTO";
+    button.title = "Resume automatic driving zoom";
+    button.setAttribute("aria-label", "Resume automatic driving zoom");
+
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+
+    L.DomEvent.on(button, "click", function (event) {
+      L.DomEvent.stop(event);
+
+      resumeAutomaticMapZoom();
+    });
+
+    return container;
+  };
+
+  zoomModeControl.addTo(radarMap);
+}
+
 function applyParkedMapState() {
   if (!radarMap || currentLatitude === null || currentLongitude === null) {
     return;
@@ -1997,7 +2078,10 @@ function updateNavigationDisplay() {
     return;
   }
 
-  const drivingZoom = navigationIntelligenceManager.targetZoom;
+  const drivingZoom =
+    mapZoomMode === MAP_ZOOM_MODES.MANUAL && manualMapZoom !== null
+      ? manualMapZoom
+      : navigationIntelligenceManager.targetZoom;
 
   if (currentHeading !== null && typeof radarMap.setBearing === "function") {
     const mapBearing = convertHeadingToMapBearing(currentHeading);
@@ -2007,9 +2091,13 @@ function updateNavigationDisplay() {
     radarMap.setBearing(visualMapBearing);
   }
 
+  mapAutoZoomUpdateActive = true;
+
   radarMap.setView([currentLatitude, currentLongitude], drivingZoom, {
     animate: false,
   });
+
+  mapAutoZoomUpdateActive = false;
 
   if (currentHeading !== null) {
     applyMapLookAhead();
@@ -2606,6 +2694,21 @@ function initializeMap() {
     updateMapZoomDisplay();
     handleRadarZoomLimit();
 
+    if (
+      operatingMode === OPERATING_MODES.DRIVING &&
+      !mapAutoZoomUpdateActive &&
+      !mapZoomInspectionActive
+    ) {
+      mapZoomMode = MAP_ZOOM_MODES.MANUAL;
+      manualMapZoom = radarMap.getZoom();
+
+      updateMapZoomModeControl();
+
+      console.log("[Navigation] Manual zoom override:", {
+        zoom: manualMapZoom,
+      });
+    }
+
     if (radarFrames.length > 0 && radarMap.getZoom() <= 7) {
       displayRadarFrame(currentRadarFrame);
     }
@@ -2635,6 +2738,8 @@ function initializeMap() {
     })
     .addTo(radarMap);
 
+  initializeMapZoomModeControl();
+
   radarLayerGroup = L.layerGroup().addTo(radarMap);
 
   layerControl.addOverlay(radarLayerGroup, "🌧️ Weather Radar");
@@ -2660,11 +2765,6 @@ function initializeMap() {
   });
 
   radarMap.on("click", function (event) {
-    const mapControls = document.getElementById("map-controls");
-
-    if (mapPanel?.classList.contains("fullscreen-map")) {
-      mapControls?.classList.remove("map-controls-hidden");
-    }
 
     radarControlsVisibilityManager.handleInteraction();
 
@@ -4768,6 +4868,8 @@ function zoomToGeometryFeatures(geometryFeatures) {
     return;
   }
 
+  mapZoomInspectionActive = true;
+
   const mapPanelElement = document.getElementById("map-panel");
 
   const isFullscreen =
@@ -4826,18 +4928,24 @@ function zoomToGeometryFeatures(geometryFeatures) {
     }
 
     restoreAccuracyCircle();
+
+    mapZoomInspectionActive = false;
   }
 
   function flyBackToVehicle() {
     if (currentLatitude === null || currentLongitude === null) {
       restoreAccuracyCircle();
 
+      mapZoomInspectionActive = false;
+
       return;
     }
 
     const returnZoom =
       operatingMode === OPERATING_MODES.DRIVING
-        ? navigationIntelligenceManager.targetZoom
+        ? mapZoomMode === MAP_ZOOM_MODES.MANUAL && manualMapZoom !== null
+          ? manualMapZoom
+          : navigationIntelligenceManager.targetZoom
         : PARKED_MAP_ZOOM;
 
     radarMap.flyTo([currentLatitude, currentLongitude], returnZoom, {
@@ -4973,6 +5081,16 @@ function formatAlertTime(timeString) {
 const expandMapButton = document.getElementById("expand-map-btn");
 
 const mapPanel = document.getElementById("map-panel");
+
+const fullscreenMapMenuButton = document.getElementById(
+  "fullscreen-map-menu-btn",
+);
+
+fullscreenMapMenuButton?.addEventListener("click", function () {
+  const mapControls = document.getElementById("map-controls");
+
+  mapControls?.classList.toggle("map-controls-hidden");
+});
 
 expandMapButton.addEventListener("click", function () {
   const isFullscreen = mapPanel.classList.toggle("fullscreen-map");
