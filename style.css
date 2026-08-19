@@ -323,6 +323,39 @@ body.map-open {
     margin-top: 8px;
 }
 
+#fullscreen-map-menu-btn {
+    display: none;
+}
+
+#map-panel.fullscreen-map #fullscreen-map-menu-btn {
+    position: absolute;
+
+    top: 20px;
+    right: 20px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 48px;
+    height: 48px;
+
+    padding: 0;
+
+    border: 1px solid var(--system-accent);
+    border-radius: 8px;
+
+    background: rgba(5, 9, 13, 0.78);
+    color: var(--system-accent);
+
+    font-size: 24px;
+    cursor: pointer;
+
+    z-index: 21000;
+
+    pointer-events: auto;
+}
+
 /*
  * Row 1:
  * Time, radar freshness, and radar toggle.
@@ -1415,8 +1448,8 @@ body.map-open {
  * within the visible fullscreen map.
  */
 #map-panel.fullscreen-map .leaflet-top.leaflet-left {
-    top: 12px;
-    left: 12px;
+    top: 20px;
+    left: 20px;
     z-index: 2100;
 }
 
