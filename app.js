@@ -36,6 +36,7 @@ const MOVEMENT_VECTOR_MIN_DISTANCE_FEET = 12;
 
 const SPEED_AVERAGE_DURATION_MS = 30 * 1000;
 const PARKED_DELAY_MS = 60 * 1000;
+const WALKING_PARKED_DELAY_MS = 10 * 1000;
 
 const MAP_LOOK_AHEAD_RATIO = 0.22;
 
@@ -165,6 +166,7 @@ const SENTINEL_RELEVANCE_WEIGHTS = {
 let appProfile = APP_PROFILES.VEHICLE;
 let operatingMode = OPERATING_MODES.PARKED;
 let drivingStopStartTime = null;
+let walkingStopStartTime = null;
 
 let currentLatitude = null;
 let currentLongitude = null;
@@ -261,36 +263,33 @@ function getMovementEvidence() {
 }
 
 function determineOperatingMode() {
-  if (currentSpeedMph >= FOLLOW_SPEED_MPH) {
+  const movementEvidence = getMovementEvidence();
+  const effectiveSpeedMph = movementEvidence.effectiveSpeedMph;
+
+  if (effectiveSpeedMph >= FOLLOW_SPEED_MPH) {
     drivingStopStartTime = null;
+    walkingStopStartTime = null;
 
     return OPERATING_MODES.DRIVING;
   }
 
-  if (appProfile === APP_PROFILES.MOBILE && currentSpeedMph >= 2) {
+  if (effectiveSpeedMph >= WALKING_SPEED_MPH) {
+    drivingStopStartTime = null;
+    walkingStopStartTime = null;
+
     return OPERATING_MODES.WALKING;
   }
 
   if (operatingMode === OPERATING_MODES.DRIVING) {
-    if (currentSpeedMph >= 2) {
-      if (drivingStopStartTime !== null) {
-        diagnosticLog("Operating Mode", {
-          event: "Driving stop timer reset",
-          currentSpeedMph,
-        });
-      }
-
-      drivingStopStartTime = null;
-
-      return OPERATING_MODES.DRIVING;
-    }
+    walkingStopStartTime = null;
 
     if (drivingStopStartTime === null) {
       drivingStopStartTime = Date.now();
 
       diagnosticLog("Operating Mode", {
         event: "Driving stop timer started",
-        currentSpeedMph,
+        effectiveSpeedMph,
+        movementEvidence,
       });
     }
 
@@ -301,7 +300,36 @@ function determineOperatingMode() {
     }
 
     drivingStopStartTime = null;
+
+    return OPERATING_MODES.PARKED;
   }
+
+  if (operatingMode === OPERATING_MODES.WALKING) {
+    drivingStopStartTime = null;
+
+    if (walkingStopStartTime === null) {
+      walkingStopStartTime = Date.now();
+
+      diagnosticLog("Operating Mode", {
+        event: "Walking stop timer started",
+        effectiveSpeedMph,
+        movementEvidence,
+      });
+    }
+
+    const stoppedDuration = Date.now() - walkingStopStartTime;
+
+    if (stoppedDuration < WALKING_PARKED_DELAY_MS) {
+      return OPERATING_MODES.WALKING;
+    }
+
+    walkingStopStartTime = null;
+
+    return OPERATING_MODES.PARKED;
+  }
+
+  drivingStopStartTime = null;
+  walkingStopStartTime = null;
 
   return OPERATING_MODES.PARKED;
 }
@@ -1188,7 +1216,7 @@ async function fetchNearbyAircraft() {
   }
 
   const url =
-    `https://manager-regime-routes-centers.trycloudflare.com/aircraft` +
+    `https://reached-specifically-albums-receptor.trycloudflare.com/aircraft` +
     `?lat=${currentLatitude}` +
     `&lon=${currentLongitude}` +
     `&radiusMiles=${AIRCRAFT_RADIUS_MILES}`;
@@ -2062,7 +2090,10 @@ function resumeAutomaticMapZoom() {
     targetZoom: navigationIntelligenceManager.targetZoom,
   });
 
-  if (operatingMode === OPERATING_MODES.DRIVING) {
+  if (
+    operatingMode === OPERATING_MODES.DRIVING ||
+    operatingMode === OPERATING_MODES.WALKING
+  ) {
     updateNavigationDisplay();
   } else if (operatingMode === OPERATING_MODES.PARKED) {
     applyParkedMapState();
@@ -2974,17 +3005,23 @@ function initializeMap() {
           currentSpeedMph = 0;
         }
 
-        navigationIntelligenceManager.update(currentSpeedMph);
+        const movementEvidence = getMovementEvidence();
+
+        navigationIntelligenceManager.update(
+          movementEvidence.effectiveSpeedMph,
+        );
 
         if (position.coords.heading !== null) {
           const smoothedHeading = navigationIntelligenceManager.updateHeading(
             position.coords.heading,
-            currentSpeedMph,
+            movementEvidence.effectiveSpeedMph,
           );
 
           if (smoothedHeading !== null) {
             currentHeading = smoothedHeading;
           }
+        } else if (movementVectorDetected && movementVectorBearing !== null) {
+          currentHeading = movementVectorBearing;
         }
 
         if (!initialWarningsLoaded) {
@@ -2997,7 +3034,13 @@ function initializeMap() {
             icon: stationaryLocationIcon,
           }).addTo(radarMap);
 
-          radarMap.setView([latitude, longitude], 15);
+          mapAutoZoomUpdateActive = true;
+
+          radarMap.setView([latitude, longitude], PARKED_MAP_ZOOM, {
+            animate: false,
+          });
+
+          mapAutoZoomUpdateActive = false;
         } else {
           locationMarker.setLatLng([latitude, longitude]);
         }
