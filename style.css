@@ -1407,8 +1407,14 @@ body.map-open {
  * Keep Leaflet controls above the radar and map UI.
  */
 #map-panel.fullscreen-map .leaflet-control-container {
-    position: relative;
+    position: absolute;
+    inset: 0;
     z-index: 2000;
+    pointer-events: none;
+}
+
+#map-panel.fullscreen-map .leaflet-control {
+    pointer-events: auto;
 }
 
 /*
@@ -1449,6 +1455,12 @@ body.map-open {
  */
 #map-panel.fullscreen-map .leaflet-top.leaflet-left {
     top: 20px;
+    left: 20px;
+    z-index: 2100;
+}
+
+#map-panel.fullscreen-map .leaflet-bottom.leaflet-left {
+    bottom: 20px;
     left: 20px;
     z-index: 2100;
 }

@@ -22,10 +22,18 @@ const DEFAULT_LATITUDE = 30.3027;
 const DEFAULT_LONGITUDE = -93.1907;
 const DEFAULT_MAP_ZOOM = 9;
 const PARKED_MAP_ZOOM = 17;
+const WALKING_MAP_ZOOM = 18;
+
 const HEADING_SAMPLE_WINDOW_MS = 5000;
 const MIN_HEADING_SPEED_MPH = 3;
 
-const FOLLOW_SPEED_MPH = 8;
+const WALKING_SPEED_MPH = 1;
+const FOLLOW_SPEED_MPH = 10;
+
+const MOVEMENT_VECTOR_WINDOW_MS = 60 * 1000;
+const MOVEMENT_VECTOR_MIN_DURATION_MS = 3 * 1000;
+const MOVEMENT_VECTOR_MIN_DISTANCE_FEET = 12;
+
 const SPEED_AVERAGE_DURATION_MS = 30 * 1000;
 const PARKED_DELAY_MS = 60 * 1000;
 
@@ -162,6 +170,13 @@ let currentLatitude = null;
 let currentLongitude = null;
 let currentHeading = null;
 let currentSpeedMph = 0;
+let currentGpsSpeedAvailable = false;
+
+let movementPositionSamples = [];
+let movementVectorDetected = false;
+let movementVectorSpeedMph = 0;
+let movementVectorBearing = null;
+let movementVectorDistanceFeet = 0;
 
 let mapZoomMode = MAP_ZOOM_MODES.AUTO;
 let manualMapZoom = null;
@@ -218,6 +233,32 @@ let tempestReconnectTimer;
 /// =============================
 // Operating Mode Manager
 // =============================
+
+function getMovementEvidence() {
+  const latestVectorSample =
+    movementPositionSamples.length > 0
+      ? movementPositionSamples[movementPositionSamples.length - 1]
+      : null;
+
+  const vectorIsFresh =
+    latestVectorSample !== null &&
+    Date.now() - latestVectorSample.timestamp <= MOVEMENT_VECTOR_WINDOW_MS;
+
+  const vectorSpeedMph =
+    movementVectorDetected && vectorIsFresh ? movementVectorSpeedMph : 0;
+
+  const effectiveSpeedMph = currentGpsSpeedAvailable
+    ? Math.max(currentSpeedMph, vectorSpeedMph)
+    : vectorSpeedMph;
+
+  return {
+    gpsSpeedAvailable: currentGpsSpeedAvailable,
+    gpsSpeedMph: currentSpeedMph,
+    vectorDetected: movementVectorDetected && vectorIsFresh,
+    vectorSpeedMph,
+    effectiveSpeedMph,
+  };
+}
 
 function determineOperatingMode() {
   if (currentSpeedMph >= FOLLOW_SPEED_MPH) {
@@ -423,6 +464,110 @@ function calculateBearing(latitude1, longitude1, latitude2, longitude2) {
   const bearing = Math.atan2(y, x) * (180 / Math.PI);
 
   return (bearing + 360) % 360;
+}
+
+function updateMovementVector(
+  latitude,
+  longitude,
+  accuracyMeters,
+  timestamp = Date.now(),
+) {
+  const accuracyFeet = Number.isFinite(accuracyMeters)
+    ? accuracyMeters * 3.28084
+    : null;
+
+  movementPositionSamples.push({
+    latitude,
+    longitude,
+    accuracyFeet,
+    timestamp,
+  });
+
+  movementPositionSamples = movementPositionSamples.filter((sample) => {
+    return timestamp - sample.timestamp <= MOVEMENT_VECTOR_WINDOW_MS;
+  });
+
+  if (movementPositionSamples.length < 2) {
+    movementVectorDetected = false;
+    movementVectorSpeedMph = 0;
+    movementVectorBearing = null;
+    movementVectorDistanceFeet = 0;
+    return;
+  }
+
+  const firstSample = movementPositionSamples[0];
+  const lastSample =
+    movementPositionSamples[movementPositionSamples.length - 1];
+
+  const elapsedMilliseconds = lastSample.timestamp - firstSample.timestamp;
+
+  if (elapsedMilliseconds < MOVEMENT_VECTOR_MIN_DURATION_MS) {
+    movementVectorDetected = false;
+    movementVectorSpeedMph = 0;
+    movementVectorBearing = null;
+    movementVectorDistanceFeet = 0;
+    return;
+  }
+
+  const elapsedHours = elapsedMilliseconds / (60 * 60 * 1000);
+
+  const netDistanceMiles = calculateDistanceMiles(
+    firstSample.latitude,
+    firstSample.longitude,
+    lastSample.latitude,
+    lastSample.longitude,
+  );
+
+  movementVectorDistanceFeet = netDistanceMiles * 5280;
+
+  let pathDistanceMiles = 0;
+
+  for (let index = 1; index < movementPositionSamples.length; index += 1) {
+    const previousSample = movementPositionSamples[index - 1];
+    const currentSample = movementPositionSamples[index];
+
+    pathDistanceMiles += calculateDistanceMiles(
+      previousSample.latitude,
+      previousSample.longitude,
+      currentSample.latitude,
+      currentSample.longitude,
+    );
+  }
+
+  const directionalConsistency =
+    pathDistanceMiles > 0 ? netDistanceMiles / pathDistanceMiles : 0;
+
+  const accuracyGuardFeet = Math.max(
+    MOVEMENT_VECTOR_MIN_DISTANCE_FEET,
+    (firstSample.accuracyFeet ?? 0) * 0.75,
+    (lastSample.accuracyFeet ?? 0) * 0.75,
+  );
+
+  movementVectorSpeedMph = netDistanceMiles / elapsedHours;
+
+  movementVectorDetected =
+    movementVectorDistanceFeet >= accuracyGuardFeet &&
+    directionalConsistency >= 0.65;
+
+  movementVectorBearing = movementVectorDetected
+    ? calculateBearing(
+        firstSample.latitude,
+        firstSample.longitude,
+        lastSample.latitude,
+        lastSample.longitude,
+      )
+    : null;
+
+  console.log("[Movement Vector]", {
+    detected: movementVectorDetected,
+    distanceFeet: Number(movementVectorDistanceFeet.toFixed(1)),
+    derivedSpeedMph: Number(movementVectorSpeedMph.toFixed(1)),
+    bearing:
+      movementVectorBearing === null ? null : Math.round(movementVectorBearing),
+    consistency: Number(directionalConsistency.toFixed(2)),
+    accuracyGuardFeet: Number(accuracyGuardFeet.toFixed(1)),
+    sampleCount: movementPositionSamples.length,
+  });
 }
 
 function calculateRelativeAngle(vehicleHeading, targetBearing) {
@@ -993,6 +1138,7 @@ function focusAircraftOnMap(icao24) {
     aircraftReturnTimer = null;
 
     if (currentLatitude === null || currentLongitude === null) {
+      mapZoomInspectionActive = false;
       return;
     }
 
@@ -1042,7 +1188,7 @@ async function fetchNearbyAircraft() {
   }
 
   const url =
-    `https://attraction-render-roads-creative.trycloudflare.com/aircraft` +
+    `https://manager-regime-routes-centers.trycloudflare.com/aircraft` +
     `?lat=${currentLatitude}` +
     `&lon=${currentLongitude}` +
     `&radiusMiles=${AIRCRAFT_RADIUS_MILES}`;
@@ -1918,6 +2064,8 @@ function resumeAutomaticMapZoom() {
 
   if (operatingMode === OPERATING_MODES.DRIVING) {
     updateNavigationDisplay();
+  } else if (operatingMode === OPERATING_MODES.PARKED) {
+    applyParkedMapState();
   }
 }
 
@@ -2004,9 +2152,13 @@ function applyParkedMapState() {
    * driving look-ahead offset, then apply
    * the parked zoom level.
    */
+  mapAutoZoomUpdateActive = true;
+
   radarMap.setView([currentLatitude, currentLongitude], PARKED_MAP_ZOOM, {
     animate: false,
   });
+
+  mapAutoZoomUpdateActive = false;
 
   diagnosticLog("Navigation Command", {
     event: "Parked map state applied",
@@ -2074,14 +2226,19 @@ function updateNavigationDisplay() {
     return;
   }
 
-  if (operatingMode !== OPERATING_MODES.DRIVING) {
+  if (
+    operatingMode !== OPERATING_MODES.DRIVING &&
+    operatingMode !== OPERATING_MODES.WALKING
+  ) {
     return;
   }
 
   const drivingZoom =
     mapZoomMode === MAP_ZOOM_MODES.MANUAL && manualMapZoom !== null
       ? manualMapZoom
-      : navigationIntelligenceManager.targetZoom;
+      : operatingMode === OPERATING_MODES.WALKING
+        ? WALKING_MAP_ZOOM
+        : navigationIntelligenceManager.targetZoom;
 
   if (currentHeading !== null && typeof radarMap.setBearing === "function") {
     const mapBearing = convertHeadingToMapBearing(currentHeading);
@@ -2694,11 +2851,7 @@ function initializeMap() {
     updateMapZoomDisplay();
     handleRadarZoomLimit();
 
-    if (
-      operatingMode === OPERATING_MODES.DRIVING &&
-      !mapAutoZoomUpdateActive &&
-      !mapZoomInspectionActive
-    ) {
+    if (!mapAutoZoomUpdateActive && !mapZoomInspectionActive) {
       mapZoomMode = MAP_ZOOM_MODES.MANUAL;
       manualMapZoom = radarMap.getZoom();
 
@@ -2765,7 +2918,6 @@ function initializeMap() {
   });
 
   radarMap.on("click", function (event) {
-
     radarControlsVisibilityManager.handleInteraction();
 
     console.log("Map clicked:", event.latlng);
@@ -2794,6 +2946,13 @@ function initializeMap() {
         const latitude = position.coords.latitude;
         const longitude = position.coords.longitude;
 
+        updateMovementVector(
+          latitude,
+          longitude,
+          position.coords.accuracy,
+          position.timestamp,
+        );
+
         currentLatitude = latitude;
         currentLongitude = longitude;
 
@@ -2807,7 +2966,9 @@ function initializeMap() {
 
         const speedMetersPerSecond = position.coords.speed;
 
-        if (speedMetersPerSecond !== null) {
+        currentGpsSpeedAvailable = speedMetersPerSecond !== null;
+
+        if (currentGpsSpeedAvailable) {
           currentSpeedMph = speedMetersPerSecond * 2.23694;
         } else {
           currentSpeedMph = 0;
