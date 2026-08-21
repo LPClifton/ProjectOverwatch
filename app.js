@@ -1243,7 +1243,7 @@ async function fetchNearbyAircraft() {
   }
 
   const url =
-    `https://reached-specifically-albums-receptor.trycloudflare.com/aircraft` +
+    `https://medal-item-strong-consequences.trycloudflare.com/aircraft` +
     `?lat=${currentLatitude}` +
     `&lon=${currentLongitude}` +
     `&radiusMiles=${AIRCRAFT_RADIUS_MILES}`;
