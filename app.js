@@ -250,7 +250,7 @@ function getMovementEvidence() {
     movementVectorDetected && vectorIsFresh ? movementVectorSpeedMph : 0;
 
   const effectiveSpeedMph = currentGpsSpeedAvailable
-    ? Math.max(currentSpeedMph, vectorSpeedMph)
+    ? currentSpeedMph
     : vectorSpeedMph;
 
   return {
