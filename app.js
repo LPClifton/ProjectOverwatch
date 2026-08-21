@@ -1209,6 +1209,8 @@ function focusAircraftOnMap(icao24) {
     });
 
     setTimeout(() => {
+      mapZoomInspectionActive = false;
+
       if (
         operatingMode === OPERATING_MODES.DRIVING ||
         operatingMode === OPERATING_MODES.WALKING
@@ -1226,8 +1228,6 @@ function focusAircraftOnMap(icao24) {
 
         accuracyCircle.bringToFront();
       }
-
-      mapZoomInspectionActive = false;
     }, 1150);
   }, 1100 + AIRCRAFT_LOCATE_INSPECTION_MS);
 }
@@ -2203,6 +2203,10 @@ function applyParkedMapState() {
     return;
   }
 
+  if (mapZoomInspectionActive) {
+    return;
+  }
+
   const previousBearing = radarMap.getBearing?.() ?? null;
 
   const previousZoom = radarMap.getZoom?.() ?? null;
@@ -2300,6 +2304,10 @@ function applyMapLookAhead() {
 
 function updateNavigationDisplay() {
   if (!radarMap || currentLatitude === null || currentLongitude === null) {
+    return;
+  }
+
+  if (mapZoomInspectionActive) {
     return;
   }
 
