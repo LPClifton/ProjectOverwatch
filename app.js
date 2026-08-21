@@ -18,6 +18,11 @@ const MAP_ZOOM_MODES = {
   MANUAL: "MANUAL",
 };
 
+const MAP_BEARING_MODES = {
+  HEADING_UP: "HEADING_UP",
+  NORTH_UP: "NORTH_UP",
+};
+
 const DEFAULT_LATITUDE = 30.3027;
 const DEFAULT_LONGITUDE = -93.1907;
 const DEFAULT_MAP_ZOOM = 9;
@@ -182,6 +187,11 @@ let movementVectorDistanceFeet = 0;
 
 let mapZoomMode = MAP_ZOOM_MODES.AUTO;
 let manualMapZoom = null;
+let mapBearingMode =
+  localStorage.getItem("overwatch-map-bearing-mode") ===
+  MAP_BEARING_MODES.NORTH_UP
+    ? MAP_BEARING_MODES.NORTH_UP
+    : MAP_BEARING_MODES.HEADING_UP;
 let mapZoomInspectionActive = false;
 let mapAutoZoomUpdateActive = false;
 
@@ -2143,6 +2153,52 @@ function resumeAutomaticMapZoom() {
   }
 }
 
+function toggleMapBearingMode() {
+  mapBearingMode =
+    mapBearingMode === MAP_BEARING_MODES.HEADING_UP
+      ? MAP_BEARING_MODES.NORTH_UP
+      : MAP_BEARING_MODES.HEADING_UP;
+
+  localStorage.setItem("overwatch-map-bearing-mode", mapBearingMode);
+
+  updateMapBearingModeControl();
+
+  if (
+    operatingMode === OPERATING_MODES.DRIVING ||
+    operatingMode === OPERATING_MODES.WALKING
+  ) {
+    updateNavigationDisplay();
+  } else if (typeof radarMap?.setBearing === "function") {
+    radarMap.setBearing(0);
+  }
+
+  diagnosticLog("Navigation", {
+    event: "Map bearing mode changed",
+    bearingMode: mapBearingMode,
+  });
+}
+
+function updateMapBearingModeControl() {
+  const button = document.getElementById("map-bearing-mode-btn");
+
+  if (!button) {
+    return;
+  }
+
+  const isNorthUp = mapBearingMode === MAP_BEARING_MODES.NORTH_UP;
+
+  button.textContent = isNorthUp ? "N↑" : "HDG";
+
+  button.title = isNorthUp
+    ? "Switch to heading-up map"
+    : "Switch to north-up map";
+
+  button.setAttribute(
+    "aria-label",
+    isNorthUp ? "Switch to heading-up map" : "Switch to north-up map",
+  );
+}
+
 function updateMapZoomModeControl() {
   const button = document.getElementById("map-zoom-mode-btn");
 
@@ -2196,6 +2252,42 @@ function initializeMapZoomModeControl() {
   };
 
   zoomModeControl.addTo(radarMap);
+}
+
+function initializeMapBearingModeControl() {
+  const bearingModeControl = L.control({
+    position: "bottomleft",
+  });
+
+  bearingModeControl.onAdd = function () {
+    const container = L.DomUtil.create(
+      "div",
+      "leaflet-bar overwatch-zoom-mode-control overwatch-bearing-mode-control",
+    );
+
+    const button = L.DomUtil.create("button", "", container);
+
+    button.type = "button";
+    button.id = "map-bearing-mode-btn";
+    button.textContent = "HDG";
+    button.title = "Switch to north-up map";
+    button.setAttribute("aria-label", "Switch to north-up map");
+
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+
+    L.DomEvent.on(button, "click", function (event) {
+      L.DomEvent.stop(event);
+
+      toggleMapBearingMode();
+    });
+
+    return container;
+  };
+
+  bearingModeControl.addTo(radarMap);
+
+  updateMapBearingModeControl();
 }
 
 function applyParkedMapState() {
@@ -2325,12 +2417,16 @@ function updateNavigationDisplay() {
         ? WALKING_MAP_ZOOM
         : navigationIntelligenceManager.targetZoom;
 
-  if (currentHeading !== null && typeof radarMap.setBearing === "function") {
-    const mapBearing = convertHeadingToMapBearing(currentHeading);
+  if (typeof radarMap.setBearing === "function") {
+    if (mapBearingMode === MAP_BEARING_MODES.NORTH_UP) {
+      radarMap.setBearing(0);
+    } else if (currentHeading !== null) {
+      const mapBearing = convertHeadingToMapBearing(currentHeading);
 
-    const visualMapBearing = (360 - mapBearing) % 360;
+      const visualMapBearing = (360 - mapBearing) % 360;
 
-    radarMap.setBearing(visualMapBearing);
+      radarMap.setBearing(visualMapBearing);
+    }
   }
 
   mapAutoZoomUpdateActive = true;
@@ -2341,7 +2437,10 @@ function updateNavigationDisplay() {
 
   mapAutoZoomUpdateActive = false;
 
-  if (currentHeading !== null) {
+  if (
+    mapBearingMode === MAP_BEARING_MODES.HEADING_UP &&
+    currentHeading !== null
+  ) {
     applyMapLookAhead();
   }
 }
@@ -2929,6 +3028,7 @@ function initializeMap() {
 
   radarMap = L.map("map", {
     rotate: true,
+    rotateControl: false,
     minZoom: MIN_MAP_ZOOM,
   }).setView([defaultLatitude, defaultLongitude], DEFAULT_MAP_ZOOM);
 
@@ -2977,6 +3077,7 @@ function initializeMap() {
     .addTo(radarMap);
 
   initializeMapZoomModeControl();
+  initializeMapBearingModeControl();
 
   radarLayerGroup = L.layerGroup().addTo(radarMap);
 
@@ -5165,32 +5266,18 @@ function zoomToGeometryFeatures(geometryFeatures) {
   }
 
   function restoreMapOrientation() {
+    mapZoomInspectionActive = false;
+
     if (
       operatingMode === OPERATING_MODES.DRIVING ||
       operatingMode === OPERATING_MODES.WALKING
     ) {
-      if (
-        currentHeading !== null &&
-        typeof radarMap.setBearing === "function"
-      ) {
-        const mapBearing = convertHeadingToMapBearing(currentHeading);
-        const visualMapBearing = (360 - mapBearing) % 360;
-
-        radarMap.setBearing(visualMapBearing);
-      }
-
-      if (
-        operatingMode === OPERATING_MODES.DRIVING &&
-        currentHeading !== null
-      ) {
-        applyMapLookAhead();
-      }
-    } else if (typeof radarMap.setBearing === "function") {
-      radarMap.setBearing(0);
+      updateNavigationDisplay();
+    } else {
+      applyParkedMapState();
     }
 
     restoreAccuracyCircle();
-    mapZoomInspectionActive = false;
   }
 
   function flyBackToVehicle() {
