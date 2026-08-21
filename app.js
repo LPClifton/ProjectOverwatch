@@ -266,22 +266,20 @@ function determineOperatingMode() {
   const movementEvidence = getMovementEvidence();
   const effectiveSpeedMph = movementEvidence.effectiveSpeedMph;
 
-  if (effectiveSpeedMph >= FOLLOW_SPEED_MPH) {
-    drivingStopStartTime = null;
-    walkingStopStartTime = null;
-
-    return OPERATING_MODES.DRIVING;
-  }
-
-  if (effectiveSpeedMph >= WALKING_SPEED_MPH) {
-    drivingStopStartTime = null;
-    walkingStopStartTime = null;
-
-    return OPERATING_MODES.WALKING;
-  }
-
+  /*
+   * Once DRIVING has been established, remain
+   * DRIVING while any meaningful movement continues.
+   *
+   * DRIVING can only transition to PARKED.
+   */
   if (operatingMode === OPERATING_MODES.DRIVING) {
     walkingStopStartTime = null;
+
+    if (effectiveSpeedMph >= WALKING_SPEED_MPH) {
+      drivingStopStartTime = null;
+
+      return OPERATING_MODES.DRIVING;
+    }
 
     if (drivingStopStartTime === null) {
       drivingStopStartTime = Date.now();
@@ -304,8 +302,29 @@ function determineOperatingMode() {
     return OPERATING_MODES.PARKED;
   }
 
+  /*
+   * PARKED or WALKING can transition directly
+   * into DRIVING once speed reaches 10 mph.
+   */
+  if (effectiveSpeedMph >= FOLLOW_SPEED_MPH) {
+    drivingStopStartTime = null;
+    walkingStopStartTime = null;
+
+    return OPERATING_MODES.DRIVING;
+  }
+
+  /*
+   * Once WALKING has been established, remain
+   * WALKING while movement remains at least 1 mph.
+   */
   if (operatingMode === OPERATING_MODES.WALKING) {
     drivingStopStartTime = null;
+
+    if (effectiveSpeedMph >= WALKING_SPEED_MPH) {
+      walkingStopStartTime = null;
+
+      return OPERATING_MODES.WALKING;
+    }
 
     if (walkingStopStartTime === null) {
       walkingStopStartTime = Date.now();
@@ -326,6 +345,16 @@ function determineOperatingMode() {
     walkingStopStartTime = null;
 
     return OPERATING_MODES.PARKED;
+  }
+
+  /*
+   * WALKING may only begin from PARKED.
+   */
+  if (effectiveSpeedMph >= WALKING_SPEED_MPH) {
+    drivingStopStartTime = null;
+    walkingStopStartTime = null;
+
+    return OPERATING_MODES.WALKING;
   }
 
   drivingStopStartTime = null;
@@ -1170,12 +1199,7 @@ function focusAircraftOnMap(icao24) {
       return;
     }
 
-    const returnZoom =
-      operatingMode === OPERATING_MODES.DRIVING
-        ? mapZoomMode === MAP_ZOOM_MODES.MANUAL && manualMapZoom !== null
-          ? manualMapZoom
-          : navigationIntelligenceManager.targetZoom
-        : PARKED_MAP_ZOOM;
+    const returnZoom = getNavigationReturnZoom();
 
     radarMap.closePopup();
 
@@ -1185,7 +1209,10 @@ function focusAircraftOnMap(icao24) {
     });
 
     setTimeout(() => {
-      if (operatingMode === OPERATING_MODES.DRIVING) {
+      if (
+        operatingMode === OPERATING_MODES.DRIVING ||
+        operatingMode === OPERATING_MODES.WALKING
+      ) {
         updateNavigationDisplay();
       } else {
         applyParkedMapState();
@@ -2080,6 +2107,22 @@ function updateAlertsPanel() {
 // Navigation Functions
 // =============================
 
+function getNavigationReturnZoom() {
+  if (mapZoomMode === MAP_ZOOM_MODES.MANUAL && manualMapZoom !== null) {
+    return manualMapZoom;
+  }
+
+  if (operatingMode === OPERATING_MODES.WALKING) {
+    return WALKING_MAP_ZOOM;
+  }
+
+  if (operatingMode === OPERATING_MODES.DRIVING) {
+    return navigationIntelligenceManager.targetZoom;
+  }
+
+  return PARKED_MAP_ZOOM;
+}
+
 function resumeAutomaticMapZoom() {
   mapZoomMode = MAP_ZOOM_MODES.AUTO;
   manualMapZoom = null;
@@ -2166,12 +2209,17 @@ function applyParkedMapState() {
 
   const previousZoom = radarMap.getZoom?.() ?? null;
 
+  const parkedZoom =
+    mapZoomMode === MAP_ZOOM_MODES.MANUAL && manualMapZoom !== null
+      ? manualMapZoom
+      : PARKED_MAP_ZOOM;
+
   diagnosticLog("Navigation Command", {
     event: "Applying parked map state",
     previousBearing,
     targetBearing: 0,
     previousZoom,
-    targetZoom: PARKED_MAP_ZOOM,
+    targetZoom: parkedZoom,
   });
 
   if (typeof radarMap.setBearing === "function") {
@@ -2185,7 +2233,7 @@ function applyParkedMapState() {
    */
   mapAutoZoomUpdateActive = true;
 
-  radarMap.setView([currentLatitude, currentLongitude], PARKED_MAP_ZOOM, {
+  radarMap.setView([currentLatitude, currentLongitude], parkedZoom, {
     animate: false,
   });
 
@@ -5058,17 +5106,14 @@ function zoomToGeometryFeatures(geometryFeatures) {
 
   if (sentinelReturnTimer) {
     clearTimeout(sentinelReturnTimer);
-
     sentinelReturnTimer = null;
   }
 
   const geometryLayer = L.geoJSON(geometryFeatures);
-
   const bounds = geometryLayer.getBounds();
 
   if (!bounds.isValid()) {
     console.warn("[Sentinel] Invalid alert bounds.");
-
     return;
   }
 
@@ -5091,7 +5136,6 @@ function zoomToGeometryFeatures(geometryFeatures) {
 
   if (accuracyCircle && radarMap.hasLayer(accuracyCircle)) {
     accuracyCircleWasVisible = true;
-
     radarMap.removeLayer(accuracyCircle);
   }
 
@@ -5112,19 +5156,24 @@ function zoomToGeometryFeatures(geometryFeatures) {
   }
 
   function restoreMapOrientation() {
-    if (operatingMode === OPERATING_MODES.DRIVING) {
+    if (
+      operatingMode === OPERATING_MODES.DRIVING ||
+      operatingMode === OPERATING_MODES.WALKING
+    ) {
       if (
         currentHeading !== null &&
         typeof radarMap.setBearing === "function"
       ) {
         const mapBearing = convertHeadingToMapBearing(currentHeading);
-
         const visualMapBearing = (360 - mapBearing) % 360;
 
         radarMap.setBearing(visualMapBearing);
       }
 
-      if (currentHeading !== null) {
+      if (
+        operatingMode === OPERATING_MODES.DRIVING &&
+        currentHeading !== null
+      ) {
         applyMapLookAhead();
       }
     } else if (typeof radarMap.setBearing === "function") {
@@ -5132,25 +5181,17 @@ function zoomToGeometryFeatures(geometryFeatures) {
     }
 
     restoreAccuracyCircle();
-
     mapZoomInspectionActive = false;
   }
 
   function flyBackToVehicle() {
     if (currentLatitude === null || currentLongitude === null) {
       restoreAccuracyCircle();
-
       mapZoomInspectionActive = false;
-
       return;
     }
 
-    const returnZoom =
-      operatingMode === OPERATING_MODES.DRIVING
-        ? mapZoomMode === MAP_ZOOM_MODES.MANUAL && manualMapZoom !== null
-          ? manualMapZoom
-          : navigationIntelligenceManager.targetZoom
-        : PARKED_MAP_ZOOM;
+    const returnZoom = getNavigationReturnZoom();
 
     radarMap.flyTo([currentLatitude, currentLongitude], returnZoom, {
       animate: true,
@@ -5163,63 +5204,35 @@ function zoomToGeometryFeatures(geometryFeatures) {
   function beginReturnSequence() {
     const returnSearchZoom = Math.max(MIN_MAP_ZOOM, radarMap.getZoom() - 3);
 
-    /*
-     * Return stage 1:
-     * Pull back while remaining centered on
-     * the alert area.
-     */
     radarMap.flyTo(radarMap.getCenter(), returnSearchZoom, {
       animate: true,
       duration: isMobilePortrait ? 0.6 : 0.7,
     });
 
-    /*
-     * Return stage 2:
-     * After the pullback completes, fly back
-     * to the vehicle and restore its zoom.
-     */
     setTimeout(flyBackToVehicle, isMobilePortrait ? 650 : 750);
   }
 
   function beginAlertInspection() {
-    /*
-     * Scrolling or rotating the device can
-     * change the map dimensions. Recalculate
-     * before positioning the alert.
-     */
     radarMap.invalidateSize({
       animate: false,
     });
 
-    /*
-     * Portrait:
-     * Center the full alert immediately.
-     * Avoid competing page and map animations.
-     */
     if (isMobilePortrait) {
       radarMap.fitBounds(bounds, {
         paddingTopLeft: [20, 20],
-
         paddingBottomRight: [20, 70],
-
         animate: false,
         maxZoom: 10,
       });
 
       sentinelReturnTimer = setTimeout(() => {
         beginReturnSequence();
-
         sentinelReturnTimer = null;
       }, SENTINEL_ALERT_INSPECTION_MS);
 
       return;
     }
 
-    /*
-     * Landscape and desktop:
-     * Preserve the cinematic two-stage
-     * inspection sequence.
-     */
     const outboundSearchZoom = Math.max(MIN_MAP_ZOOM, radarMap.getZoom() - 3);
 
     radarMap.flyTo(radarMap.getCenter(), outboundSearchZoom, {
@@ -5230,25 +5243,18 @@ function zoomToGeometryFeatures(geometryFeatures) {
     setTimeout(() => {
       radarMap.flyToBounds(bounds, {
         padding: isMobileLandscape ? [24, 24] : [40, 40],
-
         animate: true,
         duration: isMobileLandscape ? 0.9 : 1.1,
-
         maxZoom: isMobileLandscape ? 10 : 11,
       });
 
       sentinelReturnTimer = setTimeout(() => {
         beginReturnSequence();
-
         sentinelReturnTimer = null;
       }, 1150 + SENTINEL_ALERT_INSPECTION_MS);
     }, 750);
   }
 
-  /*
-   * In tile view, bring the map into view
-   * before starting Sentinel inspection.
-   */
   if (
     !isFullscreen &&
     mapPanelElement &&
