@@ -2155,14 +2155,12 @@ function updateMapZoomModeControl() {
   button.textContent = isManual ? "MANUAL" : "AUTO";
 
   button.title = isManual
-    ? "Resume automatic driving zoom"
-    : "Automatic driving zoom active";
+    ? "Resume automatic map zoom"
+    : "Automatic map zoom active";
 
   button.setAttribute(
     "aria-label",
-    isManual
-      ? "Resume automatic driving zoom"
-      : "Automatic driving zoom active",
+    isManual ? "Resume automatic map zoom" : "Automatic map zoom active",
   );
 }
 
@@ -2182,8 +2180,8 @@ function initializeMapZoomModeControl() {
     button.type = "button";
     button.id = "map-zoom-mode-btn";
     button.textContent = "AUTO";
-    button.title = "Resume automatic driving zoom";
-    button.setAttribute("aria-label", "Resume automatic driving zoom");
+    button.title = "Automatic map zoom active";
+    button.setAttribute("aria-label", "Automatic map zoom active");
 
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
@@ -3068,7 +3066,10 @@ function initializeMap() {
           if (smoothedHeading !== null) {
             currentHeading = smoothedHeading;
           }
-        } else if (movementVectorDetected && movementVectorBearing !== null) {
+        } else if (
+          movementEvidence.vectorDetected &&
+          movementVectorBearing !== null
+        ) {
           currentHeading = movementVectorBearing;
         }
 
