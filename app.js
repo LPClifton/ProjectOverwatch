@@ -3094,6 +3094,25 @@ function initializeMap() {
     }
   });
 
+  radarMap.on("dragstart", function () {
+    if (mapZoomInspectionActive) {
+      return;
+    }
+
+    mapZoomMode = MAP_ZOOM_MODES.MANUAL;
+    manualMapZoom = radarMap.getZoom();
+
+    updateMapZoomModeControl();
+
+    diagnosticLog("Navigation", {
+      event: "Manual map pan override classified",
+      zoom: manualMapZoom,
+      mapZoomMode,
+      operatingMode,
+      mapBearingMode,
+    });
+  });
+
   updateMapZoomDisplay();
 
   const streetMap = L.tileLayer(
