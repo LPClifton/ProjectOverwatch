@@ -716,6 +716,11 @@ function updateMovementVector(
     derivedSpeedMph: Number(movementVectorSpeedMph.toFixed(1)),
     bearing:
       movementVectorBearing === null ? null : Math.round(movementVectorBearing),
+
+    recentHeadingBearing:
+      movementHeadingBearing === null
+        ? null
+        : Math.round(movementHeadingBearing),
     consistency: Number(directionalConsistency.toFixed(2)),
     accuracyGuardFeet: Number(accuracyGuardFeet.toFixed(1)),
     sampleCount: movementPositionSamples.length,
