@@ -5274,6 +5274,15 @@ function zoomToGeometryFeatures(geometryFeatures) {
 
   mapZoomInspectionActive = true;
 
+  diagnosticLog("Sentinel", {
+    event: "Alert map inspection started",
+    mapZoomInspectionActive,
+    mapZoomMode,
+    currentZoom: radarMap.getZoom(),
+    targetZoom: navigationIntelligenceManager.targetZoom,
+    operatingMode,
+  });
+
   const mapPanelElement = document.getElementById("map-panel");
 
   const isFullscreen =
@@ -5321,6 +5330,15 @@ function zoomToGeometryFeatures(geometryFeatures) {
     } else {
       applyParkedMapState();
     }
+
+    diagnosticLog("Sentinel", {
+      event: "Alert map inspection completed",
+      mapZoomInspectionActive,
+      mapZoomMode,
+      actualZoom: radarMap.getZoom(),
+      targetZoom: navigationIntelligenceManager.targetZoom,
+      operatingMode,
+    });
 
     restoreAccuracyCircle();
   }
