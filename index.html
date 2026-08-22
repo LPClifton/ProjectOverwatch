@@ -67,6 +67,87 @@
                 <div class="map-container">
                     <div id="map"></div>
 
+                    <div id="navigation-overlay" class="navigation-overlay">
+                        <div class="navigation-compass">
+
+                            <div class="navigation-compass-dial">
+
+                                <span class="compass-point compass-north">N</span>
+                                <span class="compass-point compass-east">E</span>
+                                <span class="compass-point compass-south">S</span>
+                                <span class="compass-point compass-west">W</span>
+
+                                <div id="navigation-compass-needle" class="navigation-compass-needle">
+                                    ▲
+                                </div>
+
+                            </div>
+
+                            <div class="navigation-compass-readout">
+
+                                <span id="navigation-compass-cardinal" class="navigation-compass-cardinal">
+                                    --
+                                </span>
+
+                                <div class="navigation-bearing-readout">
+                                    <span class="navigation-bearing-label">
+                                        BRG
+                                    </span>
+
+                                    <span id="navigation-heading" class="navigation-heading">
+                                        ---°
+                                    </span>
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                        <div class="navigation-telemetry">
+                            <div class="navigation-telemetry-item">
+                                <span class="navigation-telemetry-label">LAT</span>
+                                <span id="navigation-latitude" class="navigation-telemetry-value">
+                                    --.-----
+                                </span>
+                            </div>
+
+                            <div class="navigation-telemetry-item">
+                                <span class="navigation-telemetry-label">LON</span>
+                                <span id="navigation-longitude" class="navigation-telemetry-value">
+                                    --.-----
+                                </span>
+                            </div>
+
+                            <div class="navigation-telemetry-item">
+                                <span class="navigation-telemetry-label">ACC</span>
+                                <span id="navigation-accuracy" class="navigation-telemetry-value">
+                                    -- ft
+                                </span>
+                            </div>
+
+                            <div class="navigation-telemetry-item">
+                                <span class="navigation-telemetry-label">ELEV</span>
+                                <span id="navigation-elevation" class="navigation-telemetry-value">
+                                    -- ft
+                                </span>
+                            </div>
+
+                            <div class="navigation-telemetry-item">
+                                <span class="navigation-telemetry-label">SPD</span>
+                                <span id="navigation-speed" class="navigation-telemetry-value">
+                                    -- mph
+                                </span>
+                            </div>
+
+                            <div class="navigation-telemetry-item">
+                                <span class="navigation-telemetry-label">MODE</span>
+                                <span id="navigation-mode" class="navigation-telemetry-value">
+                                    PARKED
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
                     <p id="map-status">
                         Initializing map...
                     </p>
