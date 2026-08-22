@@ -2442,6 +2442,10 @@ function updateNavigationDisplay() {
     }
   }
 
+  if (mapZoomMode === MAP_ZOOM_MODES.MANUAL) {
+    return;
+  }
+
   mapAutoZoomUpdateActive = true;
 
   radarMap.setView([currentLatitude, currentLongitude], drivingZoom, {
