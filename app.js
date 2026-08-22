@@ -5861,23 +5861,6 @@ function refreshMapAfterViewportChange() {
       animate: false,
       pan: false,
     });
-
-    if (mapZoomInspectionActive) {
-      return;
-    }
-
-    if (mapZoomMode === MAP_ZOOM_MODES.MANUAL) {
-      return;
-    }
-
-    if (
-      operatingMode === OPERATING_MODES.DRIVING ||
-      operatingMode === OPERATING_MODES.WALKING
-    ) {
-      updateNavigationDisplay();
-    } else {
-      applyParkedMapState();
-    }
   }, 250);
 }
 
