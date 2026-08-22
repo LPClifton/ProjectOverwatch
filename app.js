@@ -379,6 +379,19 @@ function updateOperatingMode() {
   const newOperatingMode = determineOperatingMode();
 
   if (newOperatingMode === operatingMode) {
+    if (navigationIntelligenceManager.mode !== operatingMode) {
+      const previousNavigationManagerMode = navigationIntelligenceManager.mode;
+
+      navigationIntelligenceManager.mode = operatingMode;
+
+      diagnosticLog("Operating Mode", {
+        event: "Navigation manager mode resynchronized",
+        operatingMode,
+        previousNavigationManagerMode,
+        navigationManagerMode: navigationIntelligenceManager.mode,
+      });
+    }
+
     return;
   }
 
@@ -3263,7 +3276,10 @@ function initializeMap() {
 
           targetZoom: navigationIntelligenceManager.targetZoom,
 
-          operatingMode: navigationIntelligenceManager.mode,
+          operatingMode,
+          navigationManagerMode: navigationIntelligenceManager.mode,
+          operatingModesSynchronized:
+            operatingMode === navigationIntelligenceManager.mode,
 
           mapZoomMode,
           mapBearingMode,
