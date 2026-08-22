@@ -5856,12 +5856,53 @@ function refreshMapAfterViewportChange() {
     return;
   }
 
+  const logViewportState = function (stage) {
+    const mapContainer = radarMap.getContainer();
+    const leafletSize = radarMap.getSize();
+
+    diagnosticLog("Viewport", {
+      stage,
+
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+
+      visualViewportWidth: window.visualViewport?.width ?? null,
+
+      visualViewportHeight: window.visualViewport?.height ?? null,
+
+      mapClientWidth: mapContainer.clientWidth,
+
+      mapClientHeight: mapContainer.clientHeight,
+
+      leafletWidth: leafletSize.x,
+
+      leafletHeight: leafletSize.y,
+
+      orientation: screen.orientation?.type ?? null,
+
+      fullscreen:
+        document
+          .getElementById("map-panel")
+          ?.classList.contains("fullscreen-map") === true,
+    });
+  };
+
+  logViewportState("orientationchange");
+
   setTimeout(function () {
+    logViewportState("before invalidate 250ms");
+
     radarMap.invalidateSize({
       animate: false,
       pan: false,
     });
+
+    logViewportState("after invalidate 250ms");
   }, 250);
+
+  setTimeout(function () {
+    logViewportState("settled 1000ms");
+  }, 1000);
 }
 
 window.addEventListener("orientationchange", refreshMapAfterViewportChange);
