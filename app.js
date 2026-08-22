@@ -180,6 +180,11 @@ let currentHeading = null;
 let currentSpeedMph = 0;
 let currentGpsSpeedAvailable = false;
 
+let currentGpsAccuracyFeet = null;
+let currentElevationFeet = null;
+let currentElevationAccuracyFeet = null;
+let currentElevationSource = null;
+
 let movementPositionSamples = [];
 let movementVectorDetected = false;
 let movementVectorSpeedMph = 0;
@@ -214,6 +219,9 @@ let aircraftMotionTimer = null;
 let aircraftReturnTimer = null;
 let warningsLayer;
 let layerControl;
+let navigationTelemetryLayer;
+let navigationTelemetryVisible =
+  localStorage.getItem("overwatch-navigation-telemetry-visible") !== "false";
 let observedRadarFrames = [];
 let forecastRadarFrames = [];
 
@@ -777,6 +785,155 @@ function bearingToCompass(bearing) {
 
   return compassDirections[index];
 }
+
+function updateNavigationTelemetryDisplay() {
+  const latitudeElement = document.getElementById("navigation-latitude");
+
+  const longitudeElement = document.getElementById("navigation-longitude");
+
+  const accuracyElement = document.getElementById("navigation-accuracy");
+
+  const elevationElement = document.getElementById("navigation-elevation");
+
+  const speedElement = document.getElementById("navigation-speed");
+
+  const modeElement = document.getElementById("navigation-mode");
+
+  const headingElement = document.getElementById("navigation-heading");
+
+  const cardinalElement = document.getElementById(
+    "navigation-compass-cardinal",
+  );
+  const compassNeedle = document.getElementById("navigation-compass-needle");
+
+  if (
+    !latitudeElement ||
+    !longitudeElement ||
+    !accuracyElement ||
+    !elevationElement ||
+    !speedElement ||
+    !modeElement ||
+    !headingElement ||
+    !cardinalElement ||
+    !compassNeedle
+  ) {
+    return;
+  }
+
+  latitudeElement.textContent = Number.isFinite(currentLatitude)
+    ? currentLatitude.toFixed(5)
+    : "--.-----";
+
+  longitudeElement.textContent = Number.isFinite(currentLongitude)
+    ? currentLongitude.toFixed(5)
+    : "--.-----";
+
+  accuracyElement.textContent = Number.isFinite(currentGpsAccuracyFeet)
+    ? `${Math.round(currentGpsAccuracyFeet)} ft`
+    : "-- ft";
+
+  elevationElement.textContent = Number.isFinite(currentElevationFeet)
+    ? `${Math.round(currentElevationFeet)} ft`
+    : "-- ft";
+
+  if (currentElevationSource === "GPS") {
+    elevationElement.title = Number.isFinite(currentElevationAccuracyFeet)
+      ? `GPS altitude • ±${Math.round(currentElevationAccuracyFeet)} ft`
+      : "GPS altitude";
+  } else if (currentElevationSource === "TERRAIN") {
+    elevationElement.title = "Terrain elevation • Copernicus GLO-90";
+  } else {
+    elevationElement.title = "Elevation unavailable";
+  }
+
+  const movementEvidence = getMovementEvidence();
+
+  speedElement.textContent = Number.isFinite(movementEvidence.effectiveSpeedMph)
+    ? `${movementEvidence.effectiveSpeedMph.toFixed(1)} mph`
+    : "-- mph";
+
+  modeElement.textContent = operatingMode;
+
+  if (Number.isFinite(currentHeading)) {
+    const normalizedHeading = ((currentHeading % 360) + 360) % 360;
+
+    const displayedHeading = Math.round(normalizedHeading) % 360;
+
+    headingElement.textContent = `${String(displayedHeading).padStart(3, "0")}°`;
+
+    cardinalElement.textContent = bearingToCompass(normalizedHeading);
+
+    compassNeedle.style.transform = `translate(-50%, -50%) rotate(${normalizedHeading}deg)`;
+
+    compassNeedle.style.opacity = "1";
+  } else {
+    headingElement.textContent = "---°";
+    cardinalElement.textContent = "--";
+
+    compassNeedle.style.transform = "translate(-50%, -50%) rotate(0deg)";
+
+    compassNeedle.style.opacity = "0.35";
+  }
+}
+
+async function updateTerrainElevation(latitude, longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return;
+  }
+
+  const now = Date.now();
+
+  if (
+    updateTerrainElevation.lastLookupTime &&
+    now - updateTerrainElevation.lastLookupTime < 30 * 1000
+  ) {
+    return;
+  }
+
+  if (updateTerrainElevation.requestInProgress) {
+    return;
+  }
+
+  updateTerrainElevation.lastLookupTime = now;
+  updateTerrainElevation.requestInProgress = true;
+
+  try {
+    const url =
+      "https://api.open-meteo.com/v1/elevation" +
+      `?latitude=${latitude}` +
+      `&longitude=${longitude}`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    const elevationMeters = Array.isArray(data.elevation)
+      ? data.elevation[0]
+      : null;
+
+    if (!Number.isFinite(elevationMeters)) {
+      throw new Error("Elevation unavailable");
+    }
+
+    currentElevationFeet = elevationMeters * 3.28084;
+
+    currentElevationAccuracyFeet = null;
+    currentElevationSource = "TERRAIN";
+
+    updateNavigationTelemetryDisplay();
+  } catch (error) {
+    console.warn("[Elevation] Terrain lookup failed:", error);
+  } finally {
+    updateTerrainElevation.requestInProgress = false;
+  }
+}
+
+updateTerrainElevation.lastLookupTime = 0;
+updateTerrainElevation.requestInProgress = false;
 
 function degreesToRadians(degrees) {
   return degrees * (Math.PI / 180);
@@ -3224,6 +3381,44 @@ function initializeMap() {
   initializeMapZoomModeControl();
   initializeMapBearingModeControl();
 
+  navigationTelemetryLayer = L.layerGroup();
+
+  navigationTelemetryLayer.on("add", function () {
+    navigationTelemetryVisible = true;
+
+    localStorage.setItem("overwatch-navigation-telemetry-visible", "true");
+
+    const navigationOverlay = document.getElementById("navigation-overlay");
+
+    if (navigationOverlay) {
+      navigationOverlay.style.display = "flex";
+    }
+  });
+
+  navigationTelemetryLayer.on("remove", function () {
+    navigationTelemetryVisible = false;
+
+    localStorage.setItem("overwatch-navigation-telemetry-visible", "false");
+
+    const navigationOverlay = document.getElementById("navigation-overlay");
+
+    if (navigationOverlay) {
+      navigationOverlay.style.display = "none";
+    }
+  });
+
+  layerControl.addOverlay(navigationTelemetryLayer, "🧭 Navigation Telemetry");
+
+  if (navigationTelemetryVisible) {
+    navigationTelemetryLayer.addTo(radarMap);
+  } else {
+    const navigationOverlay = document.getElementById("navigation-overlay");
+
+    if (navigationOverlay) {
+      navigationOverlay.style.display = "none";
+    }
+  }
+
   radarLayerGroup = L.layerGroup().addTo(radarMap);
 
   layerControl.addOverlay(radarLayerGroup, "🌧️ Weather Radar");
@@ -3286,6 +3481,32 @@ function initializeMap() {
 
         currentLatitude = latitude;
         currentLongitude = longitude;
+
+        currentGpsAccuracyFeet = Number.isFinite(position.coords.accuracy)
+          ? position.coords.accuracy * 3.28084
+          : null;
+
+        if (Number.isFinite(position.coords.altitude)) {
+          currentElevationFeet = position.coords.altitude * 3.28084;
+
+          currentElevationAccuracyFeet = Number.isFinite(
+            position.coords.altitudeAccuracy,
+          )
+            ? position.coords.altitudeAccuracy * 3.28084
+            : null;
+
+          currentElevationSource = "GPS";
+        } else {
+          currentElevationAccuracyFeet = null;
+
+          if (currentElevationSource !== "TERRAIN") {
+            currentElevationFeet = null;
+          }
+
+          if (!Number.isFinite(position.coords.altitude)) {
+            updateTerrainElevation(latitude, longitude);
+          }
+        }
 
         if (!aircraftTrackingStarted) {
           aircraftTrackingStarted = true;
@@ -3360,6 +3581,7 @@ function initializeMap() {
         updateMovementIcon();
         updateNavigationDisplay();
         updateSystemStatus();
+        updateNavigationTelemetryDisplay();
 
         diagnosticLog("Navigation", {
           latitude: currentLatitude,
@@ -5586,6 +5808,8 @@ expandMapButton.addEventListener("click", function () {
   const isFullscreen = mapPanel.classList.toggle("fullscreen-map");
 
   document.body.classList.toggle("map-open", isFullscreen);
+
+  radarControlsVisibilityManager.handleFullscreenChange();
 
   const mapControls = document.getElementById("map-controls");
 
