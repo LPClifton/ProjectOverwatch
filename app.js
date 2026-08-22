@@ -3260,7 +3260,11 @@ function initializeMap() {
           movementEvidence.effectiveSpeedMph,
         );
 
-        if (position.coords.heading !== null) {
+        if (
+          Number.isFinite(position.coords.heading) &&
+          position.coords.heading >= 0 &&
+          position.coords.heading < 360
+        ) {
           const smoothedHeading = navigationIntelligenceManager.updateHeading(
             position.coords.heading,
             movementEvidence.effectiveSpeedMph,
