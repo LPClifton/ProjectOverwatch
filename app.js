@@ -3246,7 +3246,7 @@ function initializeMap() {
 
         const speedMetersPerSecond = position.coords.speed;
 
-        currentGpsSpeedAvailable = speedMetersPerSecond !== null;
+        currentGpsSpeedAvailable = Number.isFinite(speedMetersPerSecond);
 
         if (currentGpsSpeedAvailable) {
           currentSpeedMph = speedMetersPerSecond * 2.23694;
