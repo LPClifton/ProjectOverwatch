@@ -3015,7 +3015,20 @@ function updateMapZoomDisplay() {
 
   diagnosticLog("Map", {
     event: "Zoom changed",
+
     zoom: currentZoom,
+    targetZoom: navigationIntelligenceManager.targetZoom,
+
+    mapZoomMode,
+    manualMapZoom,
+
+    mapZoomInspectionActive,
+    mapAutoZoomUpdateActive,
+
+    operatingMode,
+
+    mapBearingMode,
+
     fullscreen: mapPanel.classList.contains("fullscreen-map"),
   });
 }
@@ -3042,8 +3055,20 @@ function initializeMap() {
 
       updateMapZoomModeControl();
 
-      console.log("[Navigation] Manual zoom override:", {
-        zoom: manualMapZoom,
+      diagnosticLog("Navigation", {
+        event: "Manual zoom override classified",
+
+        zoom: radarMap.getZoom(),
+        targetZoom: navigationIntelligenceManager.targetZoom,
+
+        mapZoomMode,
+        manualMapZoom,
+
+        mapZoomInspectionActive,
+        mapAutoZoomUpdateActive,
+
+        operatingMode,
+        mapBearingMode,
       });
     }
 
