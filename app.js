@@ -3353,14 +3353,6 @@ function initializeMap() {
 
         contextManager.setStatus({
           source: "gps",
-          priority: "critical",
-          icon: "🔴",
-          title: "GPS Signal Lost",
-          detail: "Location unavailable",
-        });
-
-        contextManager.setStatus({
-          source: "gps",
           priority: "normal",
           icon: "🛰️",
           title: "GPS Locked",
@@ -3374,6 +3366,14 @@ function initializeMap() {
         mapStatus.hidden = false;
 
         mapStatus.textContent = `GPS ERROR ${error.code} • ${error.message}`;
+
+        contextManager.setStatus({
+          source: "gps",
+          priority: "critical",
+          icon: "🔴",
+          title: "GPS Signal Lost",
+          detail: `Location unavailable • Error ${error.code}`,
+        });
 
         if (!locationMarker) {
           locationMarker = L.marker([defaultLatitude, defaultLongitude])
