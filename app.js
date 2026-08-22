@@ -461,6 +461,14 @@ const contextManager = {
   },
 
   clearStatus(source) {
+    const statusExists = this.messages.some(
+      (message) => message.source === source,
+    );
+
+    if (!statusExists) {
+      return;
+    }
+
     this.messages = this.messages.filter(
       (message) => message.source !== source,
     );
