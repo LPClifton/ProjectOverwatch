@@ -5269,7 +5269,14 @@ function getWarningStyle(eventName, properties = {}) {
     weight: priority === "critical" ? 4 : 3,
     opacity: 0.95,
     fillColor,
-    fillOpacity: priority === "low" ? 0.18 : 0.35,
+    fillOpacity:
+      priority === "critical"
+        ? 0.2
+        : priority === "high"
+          ? 0.16
+          : priority === "medium"
+            ? 0.12
+            : 0.08,
   };
 }
 
