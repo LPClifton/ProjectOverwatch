@@ -995,9 +995,7 @@ const navigationIntelligenceManager = {
 
     let averageDegrees = (averageRadians * 180) / Math.PI;
 
-    if (averageDegrees < 0) {
-      averageDegrees += 360;
-    }
+    averageDegrees = (averageDegrees + 360) % 360;
 
     this.smoothedHeading = averageDegrees;
 
