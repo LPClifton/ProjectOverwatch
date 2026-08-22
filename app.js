@@ -1960,8 +1960,6 @@ function updateAlertsPanel() {
 
     contextManager.clearStatus("sentinel");
 
-    updateRadarStatusBorderPriority("normal");
-
     return;
   }
 
