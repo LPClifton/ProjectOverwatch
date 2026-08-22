@@ -399,6 +399,8 @@ function updateOperatingMode() {
 
   navigationIntelligenceManager.mode = operatingMode;
 
+  updateMapBearingModeControl();
+
   console.log(
     "Operating mode changed:",
     previousOperatingMode,
@@ -2198,18 +2200,29 @@ function updateMapBearingModeControl() {
     return;
   }
 
-  const isNorthUp = mapBearingMode === MAP_BEARING_MODES.NORTH_UP;
+  const isNorthUpPreference = mapBearingMode === MAP_BEARING_MODES.NORTH_UP;
 
-  button.textContent = isNorthUp ? "N↑" : "HDG";
+  const isParked = operatingMode === OPERATING_MODES.PARKED;
 
-  button.title = isNorthUp
+  if (isParked) {
+    button.textContent = isNorthUpPreference ? "N↑" : "N↑·HDG";
+
+    button.title = isNorthUpPreference
+      ? "Parked north-up • Moving preference: north-up"
+      : "Parked north-up • Moving preference: heading-up";
+
+    button.setAttribute("aria-label", button.title);
+
+    return;
+  }
+
+  button.textContent = isNorthUpPreference ? "N↑" : "HDG";
+
+  button.title = isNorthUpPreference
     ? "Switch to heading-up map"
     : "Switch to north-up map";
 
-  button.setAttribute(
-    "aria-label",
-    isNorthUp ? "Switch to heading-up map" : "Switch to north-up map",
-  );
+  button.setAttribute("aria-label", button.title);
 }
 
 function updateMapZoomModeControl() {
