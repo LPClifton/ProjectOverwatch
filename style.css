@@ -1835,3 +1835,35 @@ body.map-open {
         right: 10px;
     }
 }
+
+/* Layers menu close button */
+
+.overwatch-layers-close-btn {
+    display: none;
+}
+
+.leaflet-control-layers-expanded .overwatch-layers-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    position: absolute;
+    top: 6px;
+    right: 6px;
+
+    width: 28px;
+    height: 28px;
+
+    padding: 0;
+
+    border: 1px solid var(--system-accent);
+    border-radius: 6px;
+
+    background: rgba(5, 9, 13, 0.85);
+    color: var(--system-accent);
+
+    font-size: 20px;
+    line-height: 1;
+
+    cursor: pointer;
+}

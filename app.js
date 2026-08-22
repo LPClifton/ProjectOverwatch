@@ -3378,6 +3378,29 @@ function initializeMap() {
     })
     .addTo(radarMap);
 
+  const layersControlContainer = layerControl.getContainer();
+
+  if (layersControlContainer) {
+    const layersCloseButton = L.DomUtil.create(
+      "button",
+      "overwatch-layers-close-btn",
+      layersControlContainer,
+    );
+
+    layersCloseButton.type = "button";
+    layersCloseButton.textContent = "×";
+    layersCloseButton.title = "Close layers menu";
+    layersCloseButton.setAttribute("aria-label", "Close layers menu");
+
+    L.DomEvent.disableClickPropagation(layersCloseButton);
+
+    L.DomEvent.on(layersCloseButton, "click", function (event) {
+      L.DomEvent.stop(event);
+
+      layerControl.collapse();
+    });
+  }
+
   initializeMapZoomModeControl();
   initializeMapBearingModeControl();
 
@@ -5827,6 +5850,38 @@ expandMapButton.addEventListener("click", function () {
     updateMapZoomDisplay();
   }, 100);
 });
+
+function refreshMapAfterViewportChange() {
+  if (!radarMap) {
+    return;
+  }
+
+  setTimeout(function () {
+    radarMap.invalidateSize({
+      animate: false,
+      pan: false,
+    });
+
+    if (mapZoomInspectionActive) {
+      return;
+    }
+
+    if (mapZoomMode === MAP_ZOOM_MODES.MANUAL) {
+      return;
+    }
+
+    if (
+      operatingMode === OPERATING_MODES.DRIVING ||
+      operatingMode === OPERATING_MODES.WALKING
+    ) {
+      updateNavigationDisplay();
+    } else {
+      applyParkedMapState();
+    }
+  }, 250);
+}
+
+window.addEventListener("orientationchange", refreshMapAfterViewportChange);
 
 // ===================================
 // Application Start Up
