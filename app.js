@@ -36,6 +36,7 @@ const WALKING_SPEED_MPH = 1;
 const FOLLOW_SPEED_MPH = 10;
 
 const MOVEMENT_VECTOR_WINDOW_MS = 60 * 1000;
+const MOVEMENT_HEADING_WINDOW_MS = 15 * 1000;
 const MOVEMENT_VECTOR_MIN_DURATION_MS = 3 * 1000;
 const MOVEMENT_VECTOR_MIN_DISTANCE_FEET = 12;
 
@@ -183,6 +184,7 @@ let movementPositionSamples = [];
 let movementVectorDetected = false;
 let movementVectorSpeedMph = 0;
 let movementVectorBearing = null;
+let movementHeadingBearing = null;
 let movementVectorDistanceFeet = 0;
 
 let mapZoomMode = MAP_ZOOM_MODES.AUTO;
@@ -595,6 +597,7 @@ function updateMovementVector(
     movementVectorDetected = false;
     movementVectorSpeedMph = 0;
     movementVectorBearing = null;
+    movementHeadingBearing = null;
     movementVectorDistanceFeet = 0;
     return;
   }
@@ -609,6 +612,7 @@ function updateMovementVector(
     movementVectorDetected = false;
     movementVectorSpeedMph = 0;
     movementVectorBearing = null;
+    movementHeadingBearing = null;
     movementVectorDistanceFeet = 0;
     return;
   }
@@ -661,6 +665,50 @@ function updateMovementVector(
         lastSample.longitude,
       )
     : null;
+
+  const movementHeadingSamples = movementPositionSamples.filter((sample) => {
+    return (
+      lastSample.timestamp - sample.timestamp <= MOVEMENT_HEADING_WINDOW_MS
+    );
+  });
+
+  movementHeadingBearing = null;
+
+  if (movementVectorDetected && movementHeadingSamples.length >= 2) {
+    const headingFirstSample = movementHeadingSamples[0];
+
+    const headingLastSample =
+      movementHeadingSamples[movementHeadingSamples.length - 1];
+
+    const headingElapsedMilliseconds =
+      headingLastSample.timestamp - headingFirstSample.timestamp;
+
+    if (headingElapsedMilliseconds >= MOVEMENT_VECTOR_MIN_DURATION_MS) {
+      const headingDistanceMiles = calculateDistanceMiles(
+        headingFirstSample.latitude,
+        headingFirstSample.longitude,
+        headingLastSample.latitude,
+        headingLastSample.longitude,
+      );
+
+      const headingDistanceFeet = headingDistanceMiles * 5280;
+
+      const headingAccuracyGuardFeet = Math.max(
+        MOVEMENT_VECTOR_MIN_DISTANCE_FEET,
+        (headingFirstSample.accuracyFeet ?? 0) * 0.75,
+        (headingLastSample.accuracyFeet ?? 0) * 0.75,
+      );
+
+      if (headingDistanceFeet >= headingAccuracyGuardFeet) {
+        movementHeadingBearing = calculateBearing(
+          headingFirstSample.latitude,
+          headingFirstSample.longitude,
+          headingLastSample.latitude,
+          headingLastSample.longitude,
+        );
+      }
+    }
+  }
 
   console.log("[Movement Vector]", {
     detected: movementVectorDetected,
@@ -3272,11 +3320,13 @@ function initializeMap() {
           if (smoothedHeading !== null) {
             currentHeading = smoothedHeading;
           }
-        } else if (
-          movementEvidence.vectorDetected &&
-          movementVectorBearing !== null
-        ) {
-          currentHeading = movementVectorBearing;
+        } else if (movementEvidence.vectorDetected) {
+          const fallbackBearing =
+            movementHeadingBearing ?? movementVectorBearing;
+
+          if (fallbackBearing !== null) {
+            currentHeading = fallbackBearing;
+          }
         }
 
         if (!initialWarningsLoaded) {
