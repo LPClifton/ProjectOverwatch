@@ -437,6 +437,20 @@ const contextManager = {
   messages: [],
 
   setStatus(status) {
+    const existingStatus = this.messages.find(
+      (message) => message.source === status.source,
+    );
+
+    if (
+      existingStatus &&
+      existingStatus.priority === status.priority &&
+      existingStatus.icon === status.icon &&
+      existingStatus.title === status.title &&
+      existingStatus.detail === status.detail
+    ) {
+      return;
+    }
+
     this.messages = this.messages.filter(
       (message) => message.source !== status.source,
     );
