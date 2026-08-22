@@ -3240,6 +3240,10 @@ function initializeMap() {
 
           operatingMode: navigationIntelligenceManager.mode,
 
+          mapZoomMode,
+          mapBearingMode,
+          mapZoomInspectionActive,
+
           radarPlaying: radarIsPlaying,
 
           currentZoom: radarMap?.getZoom?.(),
